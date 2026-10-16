@@ -1,0 +1,10 @@
+{
+  "engine": "cocos-creator",
+  "name": "shaolin-soccer",
+  "packages": "",
+  "version": "3.8.8",
+  "orientation": "portrait",
+  "physics": {
+    "gravity": { "x": 0, "y": -800 }
+  }
+}

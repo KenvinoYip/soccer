@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2015",
+    "module": "commonjs",
+    "strict": false,
+    "experimentalDecorators": true,
+    "skipLibCheck": true,
+    "outDir": "temp/programmatic-scripts",
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": "./",
+    "paths": {
+      "cc": ["node_modules/cc/index.d.ts"]
+    }
+  },
+  "include": ["assets/scripts/**/*.ts"],
+  "exclude": ["node_modules"]
+}
