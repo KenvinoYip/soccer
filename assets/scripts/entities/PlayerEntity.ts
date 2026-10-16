@@ -48,6 +48,9 @@ export class PlayerEntity {
     private _heroKickImg: HTMLImageElement | null = null;
     private _transparentKickCanvas: HTMLCanvasElement | null = null;
 
+    // Flash-step dash shadow afterimages
+    private _dashTrails: { x: number; y: number; alpha: number }[] = [];
+
     constructor(x: number = 0, y: number = -240) {
         this.x = x;
         this.targetX = x;
@@ -69,6 +72,7 @@ export class PlayerEntity {
         this.isSuper = false;
         this._gestureTimer = 0;
         this._isGesturing = false;
+        this._dashTrails = [];
     }
 
     private _initHeroSprites(): void {
@@ -158,8 +162,34 @@ export class PlayerEntity {
         this.auraAlpha = isSuper ? 1.0 : 0.8;
     }
 
+    public flashStep(newX: number): void {
+        const clampedX = Math.max(-185, Math.min(185, newX));
+        const oldX = this.x;
+        const dist = clampedX - oldX;
+        if (Math.abs(dist) > 8) {
+            for (let i = 1; i <= 3; i++) {
+                this._dashTrails.push({
+                    x: oldX + dist * (i / 4),
+                    y: this.y,
+                    alpha: 0.65 - i * 0.12
+                });
+            }
+        }
+        this.x = clampedX;
+        this.targetX = clampedX;
+        this.vx = 0;
+    }
+
     public update(): void {
         this._animTimer += 0.08;
+
+        // Decay dash shadow trails
+        for (let i = this._dashTrails.length - 1; i >= 0; i--) {
+            this._dashTrails[i].alpha -= 0.09;
+            if (this._dashTrails[i].alpha <= 0) {
+                this._dashTrails.splice(i, 1);
+            }
+        }
 
         // Smooth horizontal position tracking towards targetX (clamped [-185, 185])
         this.targetX = Math.max(-185, Math.min(185, this.targetX));
@@ -252,6 +282,19 @@ export class PlayerEntity {
             const cy = ch / 2 - py * scale;
 
             ctx.save();
+
+            // 2.5. Flash-Step Dash Shadow Afterimages (瞬步墨影残影)
+            for (const dt of this._dashTrails) {
+                if (dt.alpha <= 0) continue;
+                const trailCx = cw / 2 + dt.x * scale;
+                const trailCy = ch / 2 - py * scale;
+                ctx.save();
+                ctx.globalAlpha = dt.alpha * 0.42;
+                ctx.shadowColor = '#00E5FF';
+                ctx.shadowBlur = 10 * scale;
+                this._drawIdleSprite(ctx, trailCx, trailCy, scale);
+                ctx.restore();
+            }
 
             if (this.kickFrame >= 2) {
                 // ── A. Multi-Action Martial Arts Kicks (多招式真功夫特写) ──

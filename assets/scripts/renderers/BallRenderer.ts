@@ -367,16 +367,21 @@ export function drawAimLine(
 }
 
 /**
- * Predicts and draws martial landing target indicator on the grass for descending balls.
- * Green when within Bruce Lee's catch range, amber when moving outside.
+ * Predicts and draws martial landing target indicator on the grass for balls.
+ * Supports contracting timing rings, concentric martial aura, and high-res interactive TAP badges.
  */
-export function drawBallLandingMarker(gfx: Graphics, balls: BallData[], playerX: number): void {
+export function drawBallLandingMarker(
+    gfx: Graphics,
+    balls: BallData[],
+    playerX: number,
+    ctx?: CanvasRenderingContext2D | null
+): void {
     const halfW = 220;
     const groundY = -240;
 
     for (const ball of balls) {
-        // Only descending balls heading towards ground
-        if (ball.vy >= 0 || ball.y < groundY - 15) continue;
+        // Only active balls above bottom out-of-bounds line
+        if (ball.y < groundY - 18) continue;
 
         // Kinematics trajectory simulation to ground line
         let simX = ball.x;
@@ -384,11 +389,13 @@ export function drawBallLandingMarker(gfx: Graphics, balls: BallData[], playerX:
         let simVx = ball.vx;
         let simVy = ball.vy;
         let landed = false;
+        let frames = 0;
 
-        for (let step = 0; step < 50; step++) {
+        for (let step = 0; step < 75; step++) {
             simX += simVx;
             simVy -= CONFIG.GRAVITY;
             simY += simVy;
+            frames++;
 
             // Lateral wall bouncing in prediction
             if (simX - ball.r < -halfW) {
@@ -407,40 +414,129 @@ export function drawBallLandingMarker(gfx: Graphics, balls: BallData[], playerX:
 
         if (!landed) continue;
 
+        const isDescending = ball.vy < 0;
         const isCatchable = Math.abs(simX - playerX) <= 44;
-        const colorMain = isCatchable ? new Color(46, 213, 115, 230) : new Color(255, 165, 2, 210);
-        const colorGlow = isCatchable ? new Color(46, 213, 115, 65) : new Color(255, 165, 2, 55);
 
-        // Ground shadow oval
+        // Visual colors: Emerald green when player is at spot, Vivid Amber/Crimson when player needs to tap
+        const colorMain = isCatchable
+            ? new Color(46, 213, 115, 235)
+            : isDescending
+            ? new Color(255, 75, 75, 230)
+            : new Color(255, 175, 25, 180);
+
+        const colorGlow = isCatchable
+            ? new Color(46, 213, 115, 70)
+            : isDescending
+            ? new Color(255, 75, 75, 65)
+            : new Color(255, 175, 25, 45);
+
+        // 1. Ground shadow oval
         gfx.fillColor = new Color(0, 0, 0, 85);
         gfx.circle(simX, groundY, 18);
         gfx.fill();
 
-        // Pulsing target aura ring
+        // 2. Pulsing target aura ring
         gfx.fillColor = colorGlow;
-        gfx.circle(simX, groundY, 24);
+        gfx.circle(simX, groundY, 25);
         gfx.fill();
 
-        // Concentric target boundary
-        gfx.lineWidth = 2.0;
+        // 3. Concentric target boundary
+        gfx.lineWidth = 2.2;
         gfx.strokeColor = colorMain;
         gfx.circle(simX, groundY, 14);
         gfx.stroke();
 
-        // Inner bullseye
+        // 4. Dynamic Contracting Timing Ring (r shrinks towards 14 as ball lands)
+        if (isDescending) {
+            const timingR = 14 + Math.min(38, frames * 1.35);
+            gfx.lineWidth = 1.8;
+            gfx.strokeColor = isCatchable
+                ? new Color(46, 213, 115, 190)
+                : new Color(255, 220, 50, 220);
+            gfx.circle(simX, groundY, timingR);
+            gfx.stroke();
+        }
+
+        // 5. Inner bullseye
         gfx.fillColor = colorMain;
         gfx.circle(simX, groundY, 4.5);
         gfx.fill();
 
-        // Directional crosshair lines
-        gfx.lineWidth = 1.5;
+        // 6. Directional crosshair lines
+        gfx.lineWidth = 1.6;
         gfx.strokeColor = colorMain;
-        gfx.moveTo(simX - 20, groundY);
-        gfx.lineTo(simX + 20, groundY);
+        gfx.moveTo(simX - 22, groundY);
+        gfx.lineTo(simX + 22, groundY);
         gfx.stroke();
         gfx.moveTo(simX, groundY - 8);
         gfx.lineTo(simX, groundY + 8);
         gfx.stroke();
+
+        // 7. Interactive High-Res Floating Badge on Canvas2D Overlay
+        if (ctx) {
+            const cw = ctx.canvas.width;
+            const ch = ctx.canvas.height;
+            const scale = Math.min(cw / 440, ch / 780);
+            const screenX = cw / 2 + simX * scale;
+            const screenY = ch / 2 - groundY * scale;
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            if (isCatchable) {
+                // Character is in place: show ready badge
+                const tagH = 22 * scale;
+                const tagW = 92 * scale;
+                const tagY = screenY - 35 * scale;
+
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.92)';
+                ctx.strokeStyle = '#34D399';
+                ctx.lineWidth = 1.5 * scale;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH, 11 * scale);
+                else ctx.rect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `900 ${Math.round(11 * scale)}px 'PingFang SC', sans-serif`;
+                ctx.fillText('🥋 已就位·截击', screenX, tagY);
+            } else {
+                // Needs tap: show bouncing urgent tap button with glowing border
+                const bounce = Math.sin(Date.now() * 0.009) * 3.5 * scale;
+                const tagH = 25 * scale;
+                const tagW = 100 * scale;
+                const tagY = screenY - 40 * scale + bounce;
+
+                ctx.shadowColor = '#FF4757';
+                ctx.shadowBlur = 12 * scale;
+
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.94)';
+                ctx.strokeStyle = '#FBBF24';
+                ctx.lineWidth = 2.0 * scale;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH, 12 * scale);
+                else ctx.rect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `900 ${Math.round(11 * scale)}px 'PingFang SC', sans-serif`;
+                ctx.fillText('👆 点击此处接球', screenX, tagY);
+
+                // Downward pointer arrow
+                ctx.fillStyle = '#FBBF24';
+                ctx.beginPath();
+                ctx.moveTo(screenX - 6 * scale, tagY + tagH / 2 + 1 * scale);
+                ctx.lineTo(screenX + 6 * scale, tagY + tagH / 2 + 1 * scale);
+                ctx.lineTo(screenX, tagY + tagH / 2 + 6 * scale);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
     }
 }
 

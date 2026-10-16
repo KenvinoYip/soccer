@@ -290,14 +290,62 @@ export class GameManager extends Component {
       return;
     }
 
-    // 3. 当场上有足球在飞行回弹时：拖拽/点击控制李小龙横向身法走位，准备截球！
+    // 3. 当场上有足球在飞行回弹时：点击落点瞬步截击！彻底废弃拖拽人物！
     if (this.balls.length > 0) {
-      this.isMovingPaddle = true;
-      this.player.targetX = Math.max(-185, Math.min(185, x));
+      const targets = this.getBallLandingTargets();
+      if (targets.length > 0) {
+        // 找到与点击 X 最接近的预判落点
+        let bestTarget = targets[0];
+        let bestDist = Math.abs(x - bestTarget.landingX);
+
+        for (let i = 1; i < targets.length; i++) {
+          const dist = Math.abs(x - targets[i].landingX);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestTarget = targets[i];
+          }
+        }
+
+        // 宽容度判定：只要点击在落点附近（95px以内），或点击在下半屏草地区域（y <= -80）
+        if (bestDist <= 95 || y <= CONFIG.GROUND_Y + 160) {
+          const oldX = this.player.x;
+          const targetX = bestTarget.landingX;
+
+          // 瞬步闪现就位！
+          this.player.flashStep(targetX);
+
+          // 酷炫国潮水墨残影与踏风特效
+          particlePool.spawnInkSplatter(oldX, CONFIG.GROUND_Y, 14);
+          particlePool.spawnInkSplatter(targetX, CONFIG.GROUND_Y, 10);
+          shockWavePool.spawn(targetX, CONFIG.GROUND_Y, false);
+          audioSystem.play('wata');
+
+          // 判断是否压哨/精准截击时机（球已进入下落草地区或距离触地 <= 7 帧）
+          const inCatchZone = bestTarget.ball.y <= CONFIG.GROUND_Y + 45 && bestTarget.ball.y >= CONFIG.GROUND_Y - 25;
+          if (inCatchZone || (bestTarget.isDescending && bestTarget.framesToLand <= 7)) {
+            // 完美时机触发凌空绝杀！
+            this.executeVolleyKick(bestTarget.ball, true);
+          } else {
+            // 提前瞬步就位，摆出蓄势待发姿势！
+            this.player.startCharge();
+            floatTextPool.spawn(targetX, CONFIG.GROUND_Y + 45, '⚡ 瞬步就位! 等候抽射!', '#00E5FF', 18, -1.8);
+          }
+          return;
+        }
+      }
+
+      // 如果点击在草地但未能匹配具体落点（例如球在极高空），依然支持点击瞬步到该位置备战
+      if (y <= CONFIG.GROUND_Y + 120) {
+        const targetX = Math.max(-185, Math.min(185, x));
+        this.player.flashStep(targetX);
+        particlePool.spawnInkSplatter(targetX, CONFIG.GROUND_Y, 8);
+        audioSystem.play('kick');
+        return;
+      }
       return;
     }
 
-    // 4. 场上无球时：拖拽瞄准击发足球（起手速度平缓）
+    // 4. 场上无球时：拖拽瞄准击发首球（起手速度平缓）
     if (this.ammo <= 0) {
       audioSystem.play('shield');
       floatTextPool.spawn(0, -90, '⚽ 足球已耗尽！点击底部就绪技能直接绝杀！', '#FF6B6B', 16);
@@ -313,9 +361,8 @@ export class GameManager extends Component {
   }
 
   private onPointerMove(x: number, y: number) {
-    // 场上有球时，手指移动即滑动李小龙
+    // 场上有球时不再支持拖拽人物移动（纯靠点击落点瞬步接球）
     if (this.balls.length > 0) {
-      this.player.targetX = Math.max(-185, Math.min(185, x));
       return;
     }
     if (!this.isCharging) return;
@@ -326,8 +373,13 @@ export class GameManager extends Component {
   private onPointerUp() {
     this.isMovingPaddle = false;
     if (!this.isCharging) return;
-    this.isCharging = false;
-    this.fireBall();
+    if (this.balls.length === 0) {
+      this.isCharging = false;
+      this.fireBall();
+    } else {
+      this.isCharging = false;
+      this.player.stopCharge();
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -786,6 +838,138 @@ export class GameManager extends Component {
   }
 
   // ─────────────────────────────────────────────────────────
+  // Interception & Volley Kick System (落点预判与瞬步绝杀连踢)
+  // ─────────────────────────────────────────────────────────
+
+  public getBallLandingTargets(): { ball: BallData; landingX: number; framesToLand: number; isDescending: boolean }[] {
+    const targets: { ball: BallData; landingX: number; framesToLand: number; isDescending: boolean }[] = [];
+    const groundY = CONFIG.GROUND_Y;
+    const halfW = CONFIG.CANVAS.HALF_W;
+
+    for (const ball of this.balls) {
+      if (ball.y < groundY - 20) continue;
+
+      let simX = ball.x;
+      let simY = ball.y;
+      let simVx = ball.vx;
+      let simVy = ball.vy;
+      let landed = false;
+      let frames = 0;
+
+      for (let step = 0; step < 75; step++) {
+        simX += simVx;
+        simVy -= CONFIG.GRAVITY;
+        simY += simVy;
+        frames++;
+
+        if (simX - ball.r < -halfW) {
+          simX = -halfW + ball.r;
+          simVx = -simVx * 0.94;
+        } else if (simX + ball.r > halfW) {
+          simX = halfW - ball.r;
+          simVx = -simVx * 0.94;
+        }
+
+        if (simY <= groundY) {
+          landed = true;
+          break;
+        }
+      }
+
+      if (landed) {
+        targets.push({
+          ball,
+          landingX: Math.max(-185, Math.min(185, simX)),
+          framesToLand: frames,
+          isDescending: ball.vy < 0
+        });
+      }
+    }
+
+    targets.sort((a, b) => {
+      if (a.isDescending !== b.isDescending) return a.isDescending ? -1 : 1;
+      return a.framesToLand - b.framesToLand;
+    });
+
+    return targets;
+  }
+
+  private executeVolleyKick(ball: BallData, isPerfectTap: boolean = false): void {
+    ball.volleyCount = (ball.volleyCount || 0) + 1;
+    const count = ball.volleyCount;
+
+    // 打砖块力学反弹：依据球落在人物左侧、中间或右侧计算弹射仰角
+    const dxToPlayer = ball.x - this.player.x;
+    const catchHalfWidth = 44;
+    const offset = Math.max(-1, Math.min(1, dxToPlayer / catchHalfWidth)); // -1 to 1
+    let reboundAngle = (Math.PI / 2) - offset * (Math.PI / 3.6) - Math.max(-0.25, Math.min(0.25, this.playerVx * 0.04));
+    reboundAngle = Math.max(0.42, Math.min(Math.PI - 0.42, reboundAngle));
+
+    // 连踢层级强化（速度与伤害随连击递增）
+    const speedTiers = [0.52, 0.68, 0.84, 0.98, 1.12];
+    const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)] * (isPerfectTap ? 1.15 : 1.0);
+    const dmgTiers = [1.0, 1.25, 1.6, 2.0, 2.5];
+    const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)] * (isPerfectTap ? 1.3 : 1.0);
+
+    const modeCfg = CONFIG.MODES[ball.mode] || CONFIG.MODES[0];
+    const baseKickSpeed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier;
+    const newSpeed = baseKickSpeed * speedRatio;
+
+    ball.vx = Math.cos(reboundAngle) * newSpeed;
+    ball.vy = Math.sin(reboundAngle) * newSpeed;
+    ball.y = CONFIG.GROUND_Y + 28; // 弹起脱离草地判定区
+    ball.dmg = Math.round(ball.dmg * dmgMult);
+    ball.pierceLeft = Math.max(ball.pierceLeft || 0, 5); // 恢复连踢超级穿透次数
+    ball.isSkillProjectile = false; // 保证连击球绝对为可接打砖块常规足球
+
+    if (count >= 2 || isPerfectTap) {
+      ball.isSuper = true; // 连击化身金光烈焰球
+    }
+
+    // 连击动作库：依据接球连踢次数与落点呈现多样化功夫神技！
+    let volleyKickType: KickType = 'spin';
+    let moveName = '';
+    let moveColor = '#FFE600';
+
+    if (isPerfectTap) {
+      volleyKickType = count % 2 === 0 ? 'bicycle' : 'spin';
+      moveName = `⚡ 瞬步凌空绝杀! PERFECT!`;
+      moveColor = '#FFD700';
+    } else if (count === 1) {
+      volleyKickType = 'spin';
+      moveName = '🌪️ 旋风回旋踢! 截击加速!';
+      moveColor = '#00E5FF';
+    } else if (count === 2) {
+      volleyKickType = 'bicycle';
+      moveName = '⚡ 倒挂金钩·双脚暴射! 威力狂飙!';
+      moveColor = '#FFA502';
+    } else if (count === 3) {
+      if (Math.abs(offset) > 0.35) {
+        volleyKickType = 'spin';
+        moveName = '🌪️ 3连踢·神龙摆尾回旋踢!';
+        moveColor = '#FF9F1C';
+      } else {
+        volleyKickType = 'bicycle';
+        moveName = '⚡ 3连踢·凌空倒挂双飞绝杀!';
+        moveColor = '#FF4757';
+      }
+    } else {
+      volleyKickType = 'shadowless';
+      moveName = `🥋 ${count}连爆踢·佛山无影连环脚!!`;
+      moveColor = '#FF0055';
+    }
+
+    const isSuperKick = count >= 2 || isPerfectTap;
+    this.player.kick(isSuperKick, volleyKickType);
+    audioSystem.play(isSuperKick ? 'superKick' : 'wata');
+    this.triggerShake(isSuperKick ? 12 : 7, isSuperKick ? 9 : 5);
+    shockWavePool.spawn(ball.x, ball.y, isSuperKick);
+    particlePool.spawnSpark(ball.x, ball.y, 10 + count * 3, isSuperKick ? '#FFD700' : '#FF9F1C');
+    particlePool.spawnInkSplatter(ball.x, ball.y, 12);
+    floatTextPool.spawn(this.player.x, this.player.y + 45, moveName, moveColor, 18 + Math.min(count, 4) * 2, -1.8);
+  }
+
+  // ─────────────────────────────────────────────────────────
   // Main Update Loop
   // ─────────────────────────────────────────────────────────
 
@@ -935,87 +1119,14 @@ export class GameManager extends Component {
         }
       }
 
-      // ── Kung Fu Interception & Volley Kick (接球连踢第二脚，无需耗费新球！) ──
+      // ── Kung Fu Interception & Volley Kick (自然触地或已在落点接球连踢) ──
       const isDescending = ball.vy < 0;
       const inCatchZone = ball.y >= CONFIG.GROUND_Y - 25 && ball.y <= CONFIG.GROUND_Y + 40;
       const dxToPlayer = ball.x - this.player.x;
       const catchHalfWidth = 44;
 
       if (!brickHit && isDescending && inCatchZone && Math.abs(dxToPlayer) <= catchHalfWidth) {
-        ball.volleyCount = (ball.volleyCount || 0) + 1;
-        const count = ball.volleyCount;
-
-        // 打砖块力学反弹：依据球落在李小龙左侧、中间或右侧计算弹射仰角
-        const offset = dxToPlayer / catchHalfWidth; // -1 to 1
-        let reboundAngle = (Math.PI / 2) - offset * (Math.PI / 3.6) - Math.max(-0.25, Math.min(0.25, this.playerVx * 0.04));
-        reboundAngle = Math.max(0.42, Math.min(Math.PI - 0.42, reboundAngle));
-
-        // 连踢层级强化（速度与伤害随连击递增）：
-        // 第1脚起手：0.52x 速度，1.00x 伤害
-        // 第2脚截击：0.68x 速度，1.25x 伤害
-        // 第3脚连击：0.84x 速度，1.60x 伤害
-        // 第4脚凌空：0.98x 速度，2.00x 伤害
-        // 第5脚+无影：1.12x 速度，2.50x 伤害
-        const speedTiers = [0.52, 0.68, 0.84, 0.98, 1.12];
-        const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)];
-        const dmgTiers = [1.0, 1.25, 1.6, 2.0, 2.5];
-        const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)];
-
-        const modeCfg = CONFIG.MODES[ball.mode] || CONFIG.MODES[0];
-        const baseKickSpeed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier;
-        const newSpeed = baseKickSpeed * speedRatio;
-
-        ball.vx = Math.cos(reboundAngle) * newSpeed;
-        ball.vy = Math.sin(reboundAngle) * newSpeed;
-        ball.y = CONFIG.GROUND_Y + 28; // 弹起脱离草地判定区
-        ball.pierceLeft = Math.max(ball.pierceLeft || 0, 5); // 恢复连踢超级穿透次数
-        ball.isSkillProjectile = false; // 保证连击球绝对为可接打砖块常规足球
-
-        if (count >= 2) {
-          ball.isSuper = true; // 连击化身金光烈焰球
-        }
-
-        // 连击动作库：依据接球连踢次数与落点呈现多样化李小龙武术神技！
-        let volleyKickType: KickType = 'spin';
-        let moveName = '';
-        let moveColor = '#FFE600';
-
-        if (count === 1) {
-          // 第1次连踢：360° 旋风回旋踢！
-          volleyKickType = 'spin';
-          moveName = '🌪️ 旋风回旋踢! 截击加速!';
-          moveColor = '#00E5FF';
-        } else if (count === 2) {
-          // 第2次连踢：凌空倒挂金钩·双脚暴射！(跳跃后背着地双脚踢出)
-          volleyKickType = 'bicycle';
-          moveName = '⚡ 倒挂金钩·双脚暴射! 威力狂飙!';
-          moveColor = '#FFA502';
-        } else if (count === 3) {
-          // 第3次连踢：若在侧翼则施展神龙摆尾回旋踢，在中路则施展倒挂金钩双飞绝杀
-          if (Math.abs(offset) > 0.35) {
-            volleyKickType = 'spin';
-            moveName = '🌪️ 3连踢·神龙摆尾回旋踢!';
-            moveColor = '#FF9F1C';
-          } else {
-            volleyKickType = 'bicycle';
-            moveName = '⚡ 3连踢·凌空倒挂双飞绝杀!';
-            moveColor = '#FF4757';
-          }
-        } else {
-          // 第4次及以上：超神境界·佛山无影连环脚！！
-          volleyKickType = 'shadowless';
-          moveName = `🥋 ${count}连爆踢·佛山无影连环脚!!`;
-          moveColor = '#FF0055';
-        }
-
-        const isSuperKick = count >= 2;
-        this.player.kick(isSuperKick, volleyKickType);
-        audioSystem.play(isSuperKick ? 'superKick' : 'wata');
-        this.triggerShake(isSuperKick ? 12 : 7, isSuperKick ? 9 : 5);
-        shockWavePool.spawn(ball.x, ball.y, isSuperKick);
-        particlePool.spawnSpark(ball.x, ball.y, 10 + count * 3, isSuperKick ? '#FFD700' : '#FF9F1C');
-        floatTextPool.spawn(this.player.x, this.player.y + 45, moveName, moveColor, 18 + Math.min(count, 4) * 2, -1.8);
-
+        this.executeVolleyKick(ball, false);
         continue;
       }
 
@@ -1066,7 +1177,7 @@ export class GameManager extends Component {
       drawBackground(gfx, W, H, this.flashAlpha, this.shakeOffX, this.shakeOffY);
 
       // 1.5. Dynamic Landing Target Indicator (草地截球落点预警光圈与准星)
-      drawBallLandingMarker(gfx, this.balls, this.player.x);
+      drawBallLandingMarker(gfx, this.balls, this.player.x, this.ctx);
 
       // 2. Bricks with Physics Gravity Falling
       for (const b of this.bricks) {
@@ -1257,13 +1368,13 @@ export class GameManager extends Component {
         ctx.fillText('⚠️ 足球已耗尽！点击底部可用技能直接释放绝地反击！', cw / 2, Math.round(42 * scale));
       } else if (this.balls.length > 0) {
         ctx.fillStyle = '#FBBF24';
-        ctx.fillText('🥋 左右拖拽或按A/D控制李小龙走位！接住回弹球可无限连踢升级！', cw / 2, Math.round(42 * scale));
+        ctx.fillText('⚡ 点击地面落点光圈瞬步截球！无需拖拽，点中落点即可绝杀连击！', cw / 2, Math.round(42 * scale));
       } else if (this.isCharging) {
         ctx.fillStyle = '#6EE7B7';
         ctx.fillText('🎯 瞄准中... 松手击发！(起手舒缓慢速，做好截球准备)', cw / 2, Math.round(42 * scale));
       } else {
         ctx.fillStyle = '#CBD5E1';
-        ctx.fillText('👆 拖拽瞄准击发首球 | 左右移动截接回弹 | 点击技能直接释放', cw / 2, Math.round(42 * scale));
+        ctx.fillText('👆 拖拽瞄准击发首球 | 点击地面光圈瞬步接球 | 点击技能直接释放', cw / 2, Math.round(42 * scale));
       }
 
       ctx.restore();
