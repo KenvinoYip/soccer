@@ -37,6 +37,8 @@ export class KeeperEntity {
     public r: number = 24;
     public shieldAngle: number = 0;
     public hasShield: boolean = true;
+    public shieldHp: number = 3;
+    public maxShieldHp: number = 3;
     public flying: boolean = false;
     public vy: number = 0;
     public rot: number = 0;
@@ -57,7 +59,9 @@ export class KeeperEntity {
         this.y = CONFIG.LAYOUT.KEEPER_Y;
         this._baseSpeed = 2.2 + stage * 0.32;
         this.vx = this._baseSpeed * (Math.random() < 0.5 ? 1 : -1);
-        this.hasShield = stage >= 2;
+        this.maxShieldHp = stage === 1 ? 2 : Math.min(5, 2 + stage);
+        this.shieldHp = this.maxShieldHp;
+        this.hasShield = true;
         this.flying = false;
         this.vy = 0;
         this.rot = 0;
@@ -69,6 +73,34 @@ export class KeeperEntity {
         this.shieldAngle = 0;
         this._shieldPulse = 0;
         this._shards = [];
+    }
+
+    /**
+     * 遭受攻击破盾判定：
+     * 每次击中金钟罩扣除 1 点护盾 HP，护盾彻底破碎前不会被击飞
+     */
+    public hitShield(dmg: number): { broken: boolean; currentHp: number } {
+        this.shieldHp = Math.max(0, this.shieldHp - 1);
+        this.triggerBlock(this.x, this.y, true);
+        if (this.shieldHp <= 0) {
+            this.hasShield = false;
+            const sp = this.getShieldPosition();
+            this._spawnShatterShards(sp.x, sp.y);
+            return { broken: true, currentHp: 0 };
+        }
+        return { broken: false, currentHp: this.shieldHp };
+    }
+
+    /**
+     * 罗汉回旋反抽 (Counter-Smash)：
+     * 守门员截挡后将球大力抽射回场，球速大幅提升，迫使玩家极限反应！
+     */
+    public counterSmash(ball: { vx: number; vy: number; x: number; y: number }): void {
+        const speed = Math.max(16, Math.hypot(ball.vx, ball.vy) * 1.25);
+        const counterAngle = -Math.PI / 2 + (this.x < 0 ? 0.22 : -0.22) + (Math.random() - 0.5) * 0.25;
+        ball.vx = Math.cos(counterAngle) * speed;
+        ball.vy = Math.sin(counterAngle) * speed;
+        this.triggerBlock(this.x, this.y, false);
     }
 
     /**
@@ -825,6 +857,36 @@ export class KeeperEntity {
         ctx.shadowBlur = 4 * scale;
         ctx.fillText('罡', 0, 1 * scale);
         ctx.restore();
+
+        // 5. 护盾层数指示 (Shield HP Pips: 3/3 -> 2/3 -> 1/3)
+        const pipW = 7 * scale;
+        const pipH = 3.5 * scale;
+        const totalPipsW = this.maxShieldHp * (pipW + 3 * scale);
+        const pipStartX = -totalPipsW / 2;
+        const pipY = -baseR - 11 * scale;
+
+        for (let p = 0; p < this.maxShieldHp; p++) {
+            const px = pipStartX + p * (pipW + 3 * scale);
+            const isAlive = p < this.shieldHp;
+            ctx.fillStyle = isAlive ? '#FEF08A' : 'rgba(71, 85, 105, 0.45)';
+            ctx.strokeStyle = isAlive ? '#F59E0B' : '#334155';
+            ctx.lineWidth = 1 * scale;
+            ctx.beginPath();
+            ctx.rect(px, pipY, pipW, pipH);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // 临近破碎警戒残红裂痕 (Cracking warning when only 1 shield left)
+        if (this.shieldHp === 1) {
+            ctx.strokeStyle = '#EF4444';
+            ctx.lineWidth = 1.6 * scale;
+            ctx.beginPath();
+            ctx.moveTo(-baseR * 0.45, -baseR * 0.35);
+            ctx.lineTo(0, baseR * 0.1);
+            ctx.lineTo(baseR * 0.5, baseR * 0.45);
+            ctx.stroke();
+        }
 
         ctx.restore();
     }

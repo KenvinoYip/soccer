@@ -78,6 +78,7 @@ export class GameManager extends Component {
   private ammo:   number = 5;
   private maxAmmo: number = 5;
   private mode:   number = 0;           // 0=fire, 1=clone, 2=pierce
+  private _wallMarchTimer: number = 0;  // 罗汉大阵步步紧逼倒计时 (秒)
 
   // ── Input / Aim / Paddle State ─────────────────────────────
   private isCharging: boolean = false;
@@ -190,12 +191,15 @@ export class GameManager extends Component {
     const skillId = keyMap[e.key];
     if (skillId) {
       if (skillSystem.triggerById(skillId)) {
-        // 直接触发释放！
         this.castSkill(skillId);
       } else {
         const s = skillSystem.getSkill(skillId);
         audioSystem.play('shield');
-        floatTextPool.spawn(s ? s.x : 0, -290, `冷却中: ${s?.currentCd.toFixed(1)}s`, '#FF6B6B', 15);
+        if (s && s.currentCd > 0) {
+          floatTextPool.spawn(s.x, -280, `⏳ 冷却中: ${s.currentCd.toFixed(1)}s`, '#FF6B6B', 15);
+        } else if (s && skillSystem.qi < s.qiCost) {
+          floatTextPool.spawn(s.x, -280, `⚠️ 真气不足: ${Math.round(skillSystem.qi)} / ${s.qiCost}`, '#F59E0B', 15);
+        }
       }
     }
   }
@@ -250,6 +254,10 @@ export class GameManager extends Component {
     this.maxAmmo = Math.max(4, 8 - Math.floor(this.stage / 2));
     this.ammo    = this.maxAmmo;
 
+    // 罗汉石阵下压计时重置与真气初始化 (第1关赠送25%真气体验，后续关卡从0开始技巧积累)
+    this._wallMarchTimer = 0;
+    skillSystem.reset(this.stage === 1 ? 25 : 0);
+
     // Bricks
     this.bricks = createBrickGrid(this.stage, CONFIG.W);
 
@@ -294,12 +302,14 @@ export class GameManager extends Component {
     const clickRes = skillSystem.checkClick(x, y);
     if (clickRes.clicked) {
       if (clickRes.triggered) {
-        // 直接释放该技能！
         this.castSkill(clickRes.id!);
       } else {
-        // 处于 10s 冷却中
         audioSystem.play('shield');
-        floatTextPool.spawn(clickRes.x || 0, (clickRes.y || -330) + 40, `冷却中: ${clickRes.remaining?.toFixed(1)}s`, '#FF6B6B', 15);
+        if (clickRes.reason === 'cd') {
+          floatTextPool.spawn(clickRes.x || 0, (clickRes.y || -330) + 40, `⏳ 冷却中: ${clickRes.remaining?.toFixed(1)}s`, '#FF6B6B', 15);
+        } else if (clickRes.reason === 'qi') {
+          floatTextPool.spawn(clickRes.x || 0, (clickRes.y || -330) + 40, `⚠️ 真气不足: ${Math.round(clickRes.currentQi || 0)} / ${clickRes.cost}`, '#F59E0B', 15);
+        }
       }
       return;
     }
@@ -631,11 +641,11 @@ export class GameManager extends Component {
     const zone = this.getPowerZone(this.powerPos);
 
     const isSuper = zone === 'RED';
-    const dmgMultiplier = isSuper ? 2.8 : zone === 'YELLOW' ? 1.5 : 1.0;
+    const dmgMultiplier = isSuper ? 1.6 : zone === 'YELLOW' ? 1.25 : 1.0;
     // 起手发球速度平缓舒适（52%），给玩家充分反应时间就位准备接球
     const firstShotSpeedRatio = 0.52;
-    const speedMultiplier = isSuper ? 1.20 : zone === 'YELLOW' ? 1.10 : 1.0;
-    const baseDmg   = Math.round(100 * modeCfg.dmgMultiplier * dmgMultiplier);
+    const speedMultiplier = isSuper ? 1.15 : zone === 'YELLOW' ? 1.08 : 1.0;
+    const baseDmg   = Math.round(85 * modeCfg.dmgMultiplier * dmgMultiplier);
     const baseSpeed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * speedMultiplier * firstShotSpeedRatio;
 
     const startX = this.player.x;
@@ -707,7 +717,7 @@ export class GameManager extends Component {
   // ─────────────────────────────────────────────────────────
 
   private triggerImpact(x: number, y: number, dmg: number, isSuper: boolean, radiusOverride?: number) {
-    const radius = radiusOverride ?? (isSuper ? 85 : 50);
+    const radius = radiusOverride ?? (isSuper ? 54 : 30);
 
     this.hitStop = isSuper ? 4 : 2;
     this.triggerShake(isSuper ? 14 : 7, isSuper ? 12 : 5);
@@ -749,6 +759,7 @@ export class GameManager extends Component {
           // 🌟 真实多边形水墨玄石爆碎系统 (5大立体碎石 + 宣纸飞白水墨溅射)
           particlePool.spawnBrickShatter(b, impVx, impVy);
           this.bricks.splice(i, 1);
+          skillSystem.addQi(3.5); // 击碎石碑增加真气
 
           // 破碑专属音效
           if (b.type === 'tnt') {
@@ -774,6 +785,7 @@ export class GameManager extends Component {
         } else {
           particlePool.spawnInkSplatter(cx, cy, 6);
           audioSystem.play('brickHit');
+          skillSystem.addQi(1.5); // 击中受创增加真气
         }
       }
     }
@@ -860,8 +872,8 @@ export class GameManager extends Component {
         this.balls.length === 0 &&
         !this.isCharging
       ) {
-        // 如果还有任何技能处于就绪可用状态，绝不判负！保留翻盘绝杀机会！
-        const hasReadySkill = skillSystem.skills.some(s => s.currentCd <= 0);
+        // 如果还有任何技能处于就绪可用状态（冷却完毕且真气充盈），绝不判负！保留翻盘绝杀机会！
+        const hasReadySkill = skillSystem.skills.some(s => s.currentCd <= 0 && skillSystem.qi >= s.qiCost);
         if (hasReadySkill) {
           return;
         }
@@ -886,6 +898,34 @@ export class GameManager extends Component {
     audioSystem.play('shield');
     floatTextPool.spawn(0, 50, '💔 闯关失败，重新挑战！', '#FF4757', 28);
     setTimeout(() => this.initStage(), 2200);
+  }
+
+  /**
+   * 罗汉石碑大阵步步紧逼 (Wall March)：
+   * 未清空的石阵向下整体沉降推进，倒逼玩家在底线失守前打通阵法！
+   */
+  private advanceWallMarch(): void {
+    if (this.bricks.length === 0 || this.state !== GameState.PLAYING) return;
+
+    let lowestY = Infinity;
+    for (const b of this.bricks) {
+      b.y -= 16;
+      b.targetY = (b.targetY ?? b.y) - 16;
+      b.hitFlash = 6;
+      b.shakeX = (Math.random() - 0.5) * 8;
+      if (b.y < lowestY) lowestY = b.y;
+    }
+
+    this.triggerShake(9, 6);
+    audioSystem.play('boom');
+    floatTextPool.spawn(0, CONFIG.WALL_BOTTOM - 20, '⚠️ 罗汉大阵步步紧逼!!', '#EF4444', 18, -1.8);
+
+    // 检查是否突破防守警戒线
+    if (lowestY <= CONFIG.GROUND_Y + 70) {
+      this.state = GameState.GAME_OVER;
+      floatTextPool.spawn(0, 0, '⚠️ 罗汉大阵突破防线，少林失守！', '#EF4444', 24);
+      this.onDefeat();
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1042,7 +1082,7 @@ export class GameManager extends Component {
     let timingSpeedMult = 1.0;
 
     if (timingGrade === 'PERFECT') {
-      timingDmgMult = 2.4;
+      timingDmgMult = 1.55;
       timingSpeedMult = 1.25;
       this.hitStop = 5;          // 5帧强力打击定格顿帧！
       this.cameraZoom = 1.14;    // 镜头瞬间向前变焦冲击拉近 14%！
@@ -1056,8 +1096,9 @@ export class GameManager extends Component {
       ball.squashTimer = 14;     // 14帧弹性恢复，伴随拉长彗星拖尾
       floatTextPool.spawnJudgment(this.player.x, this.player.y + 68, 'PERFECT');
       audioSystem.play('superKick');
+      skillSystem.addQi(28);     // 🌟 Perfect 判定真气充盈 (+28%)
     } else if (timingGrade === 'GREAT') {
-      timingDmgMult = 1.6;
+      timingDmgMult = 1.25;
       timingSpeedMult = 1.12;
       this.hitStop = 2;          // 2帧短顿帧
       this.cameraZoom = 1.07;    // 镜头变焦 7%
@@ -1069,7 +1110,9 @@ export class GameManager extends Component {
       ball.squashTimer = 10;
       floatTextPool.spawnJudgment(this.player.x, this.player.y + 68, 'GREAT');
       audioSystem.play(count >= 2 ? 'superKick' : 'wata');
+      skillSystem.addQi(16);     // 🌟 Great 判定真气充盈 (+16%)
     } else {
+      timingDmgMult = 1.05;
       this.cameraZoom = 1.03;
       this.triggerShake(6, 4);
       ball.squashX = 1.2;
@@ -1077,12 +1120,17 @@ export class GameManager extends Component {
       ball.squashTimer = 8;
       floatTextPool.spawnJudgment(this.player.x, this.player.y + 62, 'GOOD');
       audioSystem.play('wata');
+      skillSystem.addQi(8);      // 🌟 Good 判定基础真气 (+8%)
+    }
+
+    if (count % 3 === 0) {
+      skillSystem.addQi(15);     // 🌟 连击达标额外真气奖励 (+15%)
     }
 
     // 连踢层级强化（速度与伤害随连击递增）
     const speedTiers = [0.55, 0.72, 0.88, 1.02, 1.15];
     const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)] * timingSpeedMult;
-    const dmgTiers = [1.0, 1.25, 1.6, 2.0, 2.5];
+    const dmgTiers = [1.0, 1.15, 1.3, 1.45, 1.6];
     const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)] * timingDmgMult;
 
     const modeCfg = CONFIG.MODES[ball.mode] || CONFIG.MODES[0];
@@ -1113,8 +1161,15 @@ export class GameManager extends Component {
   // ─────────────────────────────────────────────────────────
 
   update(dt: number) {
-    // 1. Skill cooldowns (10s timer)
+    // 1. Skill cooldowns & Wall March Pressure (石碑大阵迫近定时器)
     skillSystem.update(dt || 0.016);
+    if (this.state === GameState.PLAYING && this.bricks.length > 0) {
+      this._wallMarchTimer += (dt || 0.016);
+      if (this._wallMarchTimer >= 14) {
+        this._wallMarchTimer = 0;
+        this.advanceWallMarch();
+      }
+    }
 
     // 2. 必杀技特写·半透明武魂法相降临动效
     burstCutIn.update();
@@ -1198,22 +1253,46 @@ export class GameManager extends Component {
             Math.hypot(ball.x - shieldPos.x, ball.y - shieldPos.y) < ball.r + 18;
 
           if (shieldBlocked) {
-            audioSystem.play('shield');
-            floatTextPool.spawn(ball.x, ball.y + 20, '🛡️ 金刚神钟格挡!', '#f1c40f', 16);
-            physicsSystem.reflectBallOffKeeper(ball, this.keeper);
-            this.keeper.triggerBlock(ball.x, ball.y, true);
-          } else if (!ball.isSuper && ball.dmg < 300) {
-            audioSystem.play('shield');
-            floatTextPool.spawn(ball.x, ball.y + 20, '🛡️ 罗汉推山截击!', '#f59e0b', 16);
-            physicsSystem.reflectBallOffKeeper(ball, this.keeper);
-            this.keeper.triggerBlock(ball.x, ball.y, false);
+            const res = this.keeper.hitShield(ball.dmg);
+            if (res.broken) {
+              audioSystem.play('bellShatter');
+              floatTextPool.spawn(ball.x, ball.y + 20, '💥 金钟罩彻底破裂!!', '#ff4757', 22);
+              this.keeper.knockback();
+              particlePool.spawnGoldExplosion(ball.x, ball.y, 25);
+              shockWavePool.spawn(ball.x, ball.y, true);
+            } else {
+              audioSystem.play('shield');
+              floatTextPool.spawn(ball.x, ball.y + 20, `🛡️ 金钟护体破裂! (${res.currentHp}/${this.keeper.maxShieldHp})`, '#f1c40f', 16);
+              this.keeper.counterSmash(ball);
+              floatTextPool.spawn(this.keeper.x, this.keeper.y - 28, '⚡ 罗汉大力反抽!!', '#ff6b35', 18);
+            }
+          } else if (ball.isSuper || ball.dmg >= 260) {
+            // 超级球或重击命中肉身：若有金钟罩则扣除1层护盾，若无护盾则直接破防KO击飞
+            if (this.keeper.hasShield) {
+              const res = this.keeper.hitShield(ball.dmg);
+              if (res.broken) {
+                audioSystem.play('bellShatter');
+                floatTextPool.spawn(ball.x, ball.y + 20, '💥 暴击碎盾! 罗汉KO!', '#ff4757', 22);
+                this.keeper.knockback();
+                particlePool.spawnGoldExplosion(ball.x, ball.y, 25);
+                shockWavePool.spawn(ball.x, ball.y, true);
+              } else {
+                audioSystem.play('shield');
+                floatTextPool.spawn(ball.x, ball.y + 20, `🛡️ 暴击裂盾! (${res.currentHp}/${this.keeper.maxShieldHp})`, '#f1c40f', 16);
+                this.keeper.counterSmash(ball);
+              }
+            } else {
+              this.keeper.knockback();
+              audioSystem.play('bellShatter');
+              floatTextPool.spawn(ball.x, ball.y, '💥 破防震飞! 罗汉KO!', '#ff4757', 22);
+              particlePool.spawnSpark(ball.x, ball.y, 18, '#ffd700');
+              shockWavePool.spawn(ball.x, ball.y, true);
+            }
           } else {
-            // Super ball or meteor knocks keeper out!
-            this.keeper.knockback();
-            audioSystem.play('bellShatter');
-            floatTextPool.spawn(ball.x, ball.y, '💥 破钟震飞! 罗汉KO!', '#ff4757', 22);
-            particlePool.spawnSpark(ball.x, ball.y, 18, '#ffd700');
-            shockWavePool.spawn(ball.x, ball.y, true);
+            // 普通球命中：罗汉执行【罗汉推山·大力反抽】
+            audioSystem.play('shield');
+            this.keeper.counterSmash(ball);
+            floatTextPool.spawn(this.keeper.x, this.keeper.y - 28, '🥋 罗汉推山反抽!!', '#f59e0b', 16);
           }
         }
       }
@@ -1293,6 +1372,7 @@ export class GameManager extends Component {
         this.balls.splice(i, 1);
         audioSystem.play('shield');
         floatTextPool.spawn(ball.x, -260, '❌ 未能接住失球', '#94A3B8', 14, -1.5);
+        this.advanceWallMarch(); // 漏球重罚：石阵大步迫近！
         this.scheduleGameEndCheck();
       }
     }
