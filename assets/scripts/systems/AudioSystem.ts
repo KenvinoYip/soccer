@@ -291,6 +291,92 @@ export class AudioSystem {
         break;
       }
 
+      case 'brickHit': {
+        // 玄石古碑撞击金石闷响 (Crisp stone impact thud)
+        const osc = ctx.createOscillator();
+        const thud = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        const gain2 = ctx.createGain();
+
+        // 瞬态高频石击
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1400, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.04);
+        gain1.gain.setValueAtTime(0.55 * vol, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.045);
+
+        // 石碑厚实闷响
+        thud.type = 'sine';
+        thud.frequency.setValueAtTime(130, now);
+        thud.frequency.exponentialRampToValueAtTime(50, now + 0.08);
+        gain2.gain.setValueAtTime(0.6 * vol, now);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+
+        osc.connect(gain1); gain1.connect(ctx.destination);
+        thud.connect(gain2); gain2.connect(ctx.destination);
+
+        osc.start(now); osc.stop(now + 0.05);
+        thud.start(now); thud.stop(now + 0.09);
+        break;
+      }
+
+      case 'brickShatter': {
+        // 少林玄石古碑碎石崩解爆裂 (Explosive stone crunch & shattering fracture)
+        const noiseBuffer = this.createNoiseBuffer(0.25);
+        if (noiseBuffer) {
+          const noise = ctx.createBufferSource();
+          noise.buffer = noiseBuffer;
+          const bandpass = ctx.createBiquadFilter();
+          bandpass.type = 'bandpass';
+          bandpass.frequency.setValueAtTime(2400, now);
+          bandpass.Q.setValueAtTime(2.8, now);
+
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.setValueAtTime(0.9 * vol, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.24);
+
+          noise.connect(bandpass);
+          bandpass.connect(noiseGain);
+          noiseGain.connect(ctx.destination);
+
+          noise.start(now);
+          noise.stop(now + 0.25);
+        }
+
+        // 石块崩断脆音
+        const crunch = ctx.createOscillator();
+        const crunchGain = ctx.createGain();
+        crunch.type = 'sawtooth';
+        crunch.frequency.setValueAtTime(1100, now);
+        crunch.frequency.exponentialRampToValueAtTime(160, now + 0.14);
+
+        crunchGain.gain.setValueAtTime(0.65 * vol, now);
+        crunchGain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+
+        crunch.connect(crunchGain);
+        crunchGain.connect(ctx.destination);
+
+        crunch.start(now);
+        crunch.stop(now + 0.15);
+
+        // 重低音下沉
+        const sub = ctx.createOscillator();
+        const subGain = ctx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(95, now);
+        sub.frequency.exponentialRampToValueAtTime(28, now + 0.28);
+
+        subGain.gain.setValueAtTime(0.75 * vol, now);
+        subGain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+
+        sub.connect(subGain);
+        subGain.connect(ctx.destination);
+
+        sub.start(now);
+        sub.stop(now + 0.29);
+        break;
+      }
+
       case 'combo': {
         // Two short sine beeps ascending (440Hz then 880Hz), 0.1s each
         const beep1 = ctx.createOscillator();

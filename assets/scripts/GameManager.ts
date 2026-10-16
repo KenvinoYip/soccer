@@ -600,8 +600,7 @@ export class GameManager extends Component {
 
         if (b.hp <= 0) {
           if (b.type === 'tnt') tntQueue.push({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
-          particlePool.spawnDebris(b.x + b.w / 2, b.y + b.h / 2, 7, b.color, b.w * 0.7, b.h * 0.7);
-          particlePool.spawnInkSplatter(b.x + b.w / 2, b.y + b.h / 2, 8);
+          particlePool.spawnBrickShatter(b, (Math.random() - 0.5) * 8, -7);
           this.bricks.splice(i, 1);
         }
       }
@@ -739,11 +738,42 @@ export class GameManager extends Component {
 
         if (b.hp <= 0) {
           if (b.type === 'tnt') tntQueue.push({ x: cx, y: cy });
-          particlePool.spawnDebris(cx, cy, 6, b.color, b.w * 0.6, b.h * 0.6);
-          particlePool.spawnInkSplatter(cx, cy, 10);
+
+          // 动量投射方向 (沿来球冲击源方向发散)
+          const impDx = cx - x;
+          const impDy = cy - y;
+          const impDist = Math.hypot(impDx, impDy) || 1;
+          const impVx = (impDx / impDist) * 12;
+          const impVy = (impDy / impDist) * 12;
+
+          // 🌟 真实多边形水墨玄石爆碎系统 (5大立体碎石 + 宣纸飞白水墨溅射)
+          particlePool.spawnBrickShatter(b, impVx, impVy);
           this.bricks.splice(i, 1);
+
+          // 破碑专属音效
+          if (b.type === 'tnt') {
+            audioSystem.play('tnt');
+          } else if (b.type === 'metal') {
+            audioSystem.play('shield');
+          } else {
+            audioSystem.play('brickShatter');
+          }
+
+          // 连锁引爆石碑网格震颤共振波 (Chain Resonance)
+          for (let k = 0; k < this.bricks.length; k++) {
+            const otherB = this.bricks[k];
+            const ocx = otherB.x + otherB.w / 2;
+            const ocy = otherB.y + otherB.h / 2;
+            const odist = Math.hypot(ocx - cx, ocy - cy);
+            if (odist < 85 && odist > 1) {
+              const waveRatio = 1 - odist / 85;
+              otherB.shakeX = (ocx > cx ? 1 : -1) * waveRatio * 11;
+              otherB.hitFlash = Math.max(otherB.hitFlash, Math.round(6 * waveRatio));
+            }
+          }
         } else {
-          particlePool.spawnInkSplatter(cx, cy, 4);
+          particlePool.spawnInkSplatter(cx, cy, 6);
+          audioSystem.play('brickHit');
         }
       }
     }
@@ -1372,8 +1402,8 @@ export class GameManager extends Component {
         drawBall(gfx, ball);
       }
 
-      // 6. Particles
-      particlePool.draw(gfx);
+      // 6. Particles (多边形玄石碎块 + 大写意水墨飞沫)
+      particlePool.draw(gfx, this.ctx);
 
       // 7. Player (Real Anime Hero Character Sprite)
       this.player.draw(gfx, this.ctx);

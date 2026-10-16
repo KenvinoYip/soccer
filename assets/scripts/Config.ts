@@ -54,11 +54,16 @@ export interface ParticleData {
     maxLife: number;
     r: number;
     color: string;
-    type: 'spark' | 'smoke' | 'debris' | 'fire' | 'gold' | string;
+    type: 'spark' | 'smoke' | 'debris' | 'fire' | 'gold' | 'inkDrop' | 'stoneShard' | string;
     rot: number;
     vRot: number;
     w: number;
     h: number;
+    // Enhanced stone shard polygon & ink physics
+    polygon?: { x: number; y: number }[];
+    runeChar?: string;
+    bounces?: number;
+    brickType?: 'normal' | 'metal' | 'tnt';
 }
 
 export interface FloatTextData {

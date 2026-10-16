@@ -1,8 +1,8 @@
 import { Color, Graphics } from 'cc';
-import { ParticleData, CONFIG } from '../Config';
+import { ParticleData, BrickData, CONFIG } from '../Config';
 
 function hexToColor(hex: string, alpha: number): Color {
-  let clean = hex.replace('#', '').trim();
+  let clean = (hex || '#c0392b').replace('#', '').trim();
   if (clean.length === 3) {
     clean = clean.split('').map(c => c + c).join('');
   }
@@ -15,7 +15,7 @@ function hexToColor(hex: string, alpha: number): Color {
 
 export class ParticlePool {
   private pool: ParticleData[] = [];
-  private readonly MAX = 200;
+  private readonly MAX = 350;
 
   clear(): void {
     this.pool = [];
@@ -71,11 +71,11 @@ export class ParticlePool {
         life,
         maxLife: life,
         color,
-        type: 'spark',
-        rot: 0,
+        type: 'inkDrop',
+        rot: angle,
         vRot: 0,
-        w: 0,
-        h: 0,
+        w: r * 2.4,
+        h: r,
       });
     }
   }
@@ -128,6 +128,150 @@ export class ParticlePool {
         w: pw,
         h: ph,
       });
+    }
+  }
+
+  /**
+   * 🌟 真实多边形水墨玄石爆碎系统 (Multi-Polygon Voronoi Stone Shards)
+   * 将砖块真实剖解为 4~6 块带有古篆残纹的多边形立体碎石，伴随水墨墨汁飞溅！
+   */
+  spawnBrickShatter(brick: BrickData, impactVx: number = 0, impactVy: number = 0): void {
+    const bx = brick.x;
+    const by = brick.y;
+    const w = brick.w;
+    const h = brick.h;
+    const cx = bx + w / 2;
+    const cy = by + h / 2;
+
+    // 1. 生成 5 块特征明确的多边形碎石 (Corner & Core Fragments)
+    const shardsDef = [
+      // 碎块 1: 左上角尖锐三角断片
+      {
+        poly: [
+          { x: -w * 0.45, y: -h * 0.45 },
+          { x: 0, y: -h * 0.45 },
+          { x: -w * 0.45, y: h * 0.2 },
+        ],
+        offsetX: -w * 0.25,
+        offsetY: -h * 0.25,
+        rune: '',
+      },
+      // 碎块 2: 右上角四边形断片
+      {
+        poly: [
+          { x: 0, y: -h * 0.45 },
+          { x: w * 0.45, y: -h * 0.45 },
+          { x: w * 0.45, y: 0 },
+          { x: -w * 0.1, y: -h * 0.1 },
+        ],
+        offsetX: w * 0.25,
+        offsetY: -h * 0.25,
+        rune: '',
+      },
+      // 碎块 3: 中央核心符文断片 (Core Rune Talisman)
+      {
+        poly: [
+          { x: -w * 0.2, y: -h * 0.2 },
+          { x: w * 0.2, y: -h * 0.2 },
+          { x: w * 0.25, y: h * 0.25 },
+          { x: -w * 0.25, y: h * 0.2 },
+        ],
+        offsetX: 0,
+        offsetY: 0,
+        rune: brick.type === 'metal' ? '罡' : (brick.type === 'tnt' ? '雷' : '封'),
+      },
+      // 碎块 4: 左下角切角断片
+      {
+        poly: [
+          { x: -w * 0.45, y: 0 },
+          { x: -w * 0.1, y: h * 0.1 },
+          { x: 0, y: h * 0.45 },
+          { x: -w * 0.45, y: h * 0.45 },
+        ],
+        offsetX: -w * 0.25,
+        offsetY: h * 0.25,
+        rune: '',
+      },
+      // 碎块 5: 右下角厚实断片
+      {
+        poly: [
+          { x: 0, y: 0 },
+          { x: w * 0.45, y: 0 },
+          { x: w * 0.45, y: h * 0.45 },
+          { x: 0, y: h * 0.45 },
+        ],
+        offsetX: w * 0.25,
+        offsetY: h * 0.25,
+        rune: '',
+      },
+    ];
+
+    for (let i = 0; i < shardsDef.length; i++) {
+      const def = shardsDef[i];
+      const shardX = cx + def.offsetX;
+      const shardY = cy + def.offsetY;
+
+      // 径向爆发速度 + 来球动量传递
+      const outAngle = Math.atan2(shardY - cy, shardX - cx) + (Math.random() - 0.5) * 0.4;
+      const speed = 3.5 + Math.random() * 6.5;
+      const vx = Math.cos(outAngle) * speed + impactVx * 0.24;
+      const vy = Math.sin(outAngle) * speed + impactVy * 0.24 + 1.8; // 向上抛出弧线
+
+      const life = 55 + Math.floor(Math.random() * 30);
+
+      this.spawn({
+        x: shardX,
+        y: shardY,
+        vx,
+        vy,
+        r: 0,
+        life,
+        maxLife: life,
+        color: brick.color || '#c0392b',
+        type: 'stoneShard',
+        rot: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.45,
+        w: w * 0.5,
+        h: h * 0.5,
+        polygon: def.poly,
+        runeChar: def.rune,
+        bounces: 0,
+        brickType: brick.type,
+      });
+    }
+
+    // 2. 溅射 10~14 滴高烈度大写意水墨飞沫 (Calligraphy Ink Splashes)
+    this.spawnInkSplatter(cx, cy, 12);
+
+    // 3. 针对不同砖块类型的特殊粒子反馈
+    if (brick.type === 'tnt') {
+      this.spawnSpark(cx, cy, 16, '#ff4500');
+      this.spawnSpark(cx, cy, 10, '#ffd700');
+      this.spawnSmoke(cx, cy, 6);
+    } else if (brick.type === 'metal') {
+      this.spawnSpark(cx, cy, 18, '#ffd700');
+      // 4 枚金钉四散飞溅
+      for (let k = 0; k < 4; k++) {
+        const rivetA = (k / 4) * Math.PI * 2;
+        this.spawn({
+          x: cx,
+          y: cy,
+          vx: Math.cos(rivetA) * 7,
+          vy: Math.sin(rivetA) * 7 + 2,
+          r: 2.2,
+          life: 45,
+          maxLife: 45,
+          color: '#f59e0b',
+          type: 'spark',
+          rot: 0,
+          vRot: 0.3,
+          w: 0,
+          h: 0,
+        });
+      }
+    } else {
+      // 普通砖块：青碧灵气微尘
+      this.spawnSpark(cx, cy, 8, '#00e5ff');
     }
   }
 
@@ -188,6 +332,31 @@ export class ParticlePool {
 
       if (p.type === 'spark' || p.type === 'debris') {
         p.vy -= CONFIG.GRAVITY * 0.6;
+      } else if (p.type === 'stoneShard') {
+        // 碎石受重力加速下坠与空气微弱阻力
+        p.vy -= CONFIG.GRAVITY * 0.78;
+        p.vx *= 0.985;
+
+        // 草地弹性碰撞反弹
+        if (p.y <= CONFIG.GROUND_Y && p.vy < 0) {
+          const bounces = p.bounces || 0;
+          if (bounces < 3) {
+            p.vy = -p.vy * 0.44;
+            p.vx *= 0.68;
+            p.y = CONFIG.GROUND_Y;
+            p.bounces = bounces + 1;
+            p.vRot *= -0.5; // 反弹变相自转
+          } else {
+            p.vy = 0;
+            p.vx *= 0.5;
+            p.y = CONFIG.GROUND_Y;
+            p.vRot = 0;
+          }
+        }
+      } else if (p.type === 'inkDrop') {
+        p.vy -= CONFIG.GRAVITY * 0.42;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
       }
 
       if (p.type === 'debris') {
@@ -207,7 +376,92 @@ export class ParticlePool {
     }
   }
 
-  draw(gfx: Graphics): void {
+  /**
+   * 绘制系统：优先采用 2D Canvas 高清滤镜发光渲染多边形玄石与水墨，并提供 Graphics 矢量降级
+   */
+  draw(gfx: Graphics, ctx?: CanvasRenderingContext2D | null): void {
+    if (ctx) {
+      const cw = ctx.canvas.width;
+      const ch = ctx.canvas.height;
+      const scale = Math.min(cw / 440, ch / 780);
+
+      ctx.save();
+      for (let i = 0; i < this.pool.length; i++) {
+        const p = this.pool[i];
+        const alpha = Math.max(0, p.life / p.maxLife);
+        const cx = cw / 2 + p.x * scale;
+        const cy = ch / 2 - p.y * scale;
+
+        if (p.type === 'stoneShard' && p.polygon) {
+          // ── 高清立体多边形玄石碎片 ──
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(p.rot);
+          ctx.globalAlpha = alpha;
+
+          // 1. 基底石质
+          ctx.fillStyle = p.brickType === 'metal' ? '#475569' : (p.brickType === 'tnt' ? '#991B1B' : '#1E293B');
+          ctx.strokeStyle = p.brickType === 'metal' ? '#F59E0B' : (p.brickType === 'tnt' ? '#F97316' : '#64748B');
+          ctx.lineWidth = 1.2 * scale;
+
+          ctx.beginPath();
+          const pts = p.polygon;
+          for (let k = 0; k < pts.length; k++) {
+            const px = pts[k].x * scale;
+            const py = pts[k].y * scale;
+            if (k === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // 2. 内部阴影切角
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+          ctx.beginPath();
+          if (pts.length >= 3) {
+            ctx.moveTo(pts[0].x * scale, pts[0].y * scale);
+            ctx.lineTo(pts[1].x * scale, pts[1].y * scale);
+            ctx.lineTo(0, 0);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // 3. 核心符文残印【罡】/【雷】/【封】
+          if (p.runeChar) {
+            ctx.fillStyle = p.brickType === 'metal' ? '#FCD34D' : (p.brickType === 'tnt' ? '#FEF08A' : '#38BDF8');
+            ctx.font = `900 ${Math.round(8 * scale)}px "SimHei", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(p.runeChar, 0, 0);
+          }
+
+          ctx.restore();
+        } else if (p.type === 'inkDrop') {
+          // ── 大写意拉长水墨水滴 ──
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.globalAlpha = alpha * 0.85;
+          ctx.fillStyle = p.color;
+
+          const speed = Math.hypot(p.vx, p.vy);
+          const dropAngle = Math.atan2(-p.vy, p.vx); // 注意 Y 轴方向
+          ctx.rotate(dropAngle);
+
+          // 水滴长椭圆
+          const dropLen = Math.max(3, p.r * (1 + speed * 0.3)) * scale;
+          const dropW = p.r * scale;
+
+          ctx.beginPath();
+          ctx.ellipse(0, 0, dropLen, dropW, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Graphics 矢量管线 (负责 sparks, smoke, 基础 debris 降级)
     for (let i = 0; i < this.pool.length; i++) {
       const p = this.pool[i];
       const alpha = Math.floor((p.life / p.maxLife) * 255);
@@ -221,7 +475,7 @@ export class ParticlePool {
         const currentR = p.r * (1 + (1 - p.life / p.maxLife) * 0.5);
         gfx.circle(p.x, p.y, currentR);
         gfx.fill();
-      } else if (p.type === 'debris') {
+      } else if (p.type === 'debris' || (!ctx && p.type === 'stoneShard')) {
         gfx.fillColor = hexToColor(p.color, alpha);
         const cos = Math.cos(p.rot);
         const sin = Math.sin(p.rot);
