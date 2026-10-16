@@ -38,6 +38,7 @@ export interface BallData {
     trail: { x: number; y: number; alpha: number }[];
     volleyCount?: number;
     speedMult?: number;
+    isSkillProjectile?: boolean;
 }
 
 export interface ParticleData {

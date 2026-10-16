@@ -378,7 +378,8 @@ export class GameManager extends Component {
           pierceLeft: 999, // 贯穿全线！
           isSuper: true,
           mode: 0,
-          trail: []
+          trail: [],
+          isSkillProjectile: true
         };
         this.balls.push(ball);
       }
@@ -432,7 +433,8 @@ export class GameManager extends Component {
           pierceLeft: 3,
           isSuper: false,
           mode: 1, // 闪电分身模式
-          trail: []
+          trail: [],
+          isSkillProjectile: true
         };
         this.balls.push(ball);
       }
@@ -545,12 +547,13 @@ export class GameManager extends Component {
         r: isSuper ? 18 : 13,
         rot: 0,
         dmg: this.mode === 1 ? Math.round(baseDmg * 0.75) : baseDmg,
-        pierceLeft: isSuper ? 4 : this.mode === 2 ? CONFIG.MODES[2].pierces! : 3, // Bounces up to 3 times
+        pierceLeft: isSuper ? 5 : this.mode === 2 ? (CONFIG.MODES[2].pierces || 5) : 0,
         isSuper,
         mode: this.mode,
         trail: [],
         volleyCount: 0,
-        speedMult: firstShotSpeedRatio
+        speedMult: firstShotSpeedRatio,
+        isSkillProjectile: false
       };
       this.balls.push(ball);
     }
@@ -875,23 +878,39 @@ export class GameManager extends Component {
         if (physicsSystem.checkBallBrickCollision(ball, b)) {
           brickHit = true;
 
-          if (ball.isSuper || ball.dmg >= 300) {
-            // Penetrating explosion
+          const isPenetrating = ball.isSuper || ball.dmg >= 300 || (ball.mode === 2 && (ball.pierceLeft || 0) > 0);
+
+          if (isPenetrating) {
+            // Penetrating explosion (超级贯穿爆破：引爆破坏砖块)
             this.triggerImpact(ball.x, ball.y, ball.dmg, true);
-            ball.pierceLeft--;
-            if (ball.pierceLeft <= 0) {
-              this.balls.splice(i, 1);
-              this.scheduleGameEndCheck();
+            if (ball.pierceLeft !== undefined) {
+              ball.pierceLeft--;
+            }
+            if ((ball.pierceLeft || 0) <= 0) {
+              if (ball.isSkillProjectile) {
+                // 仅大招附属散射小雷球在穿透耗尽后消失
+                this.balls.splice(i, 1);
+                this.scheduleGameEndCheck();
+              } else {
+                // 常规足球或连击超级球：穿透能量耗尽后绝不消失！转化为正常弹性反弹球，落回给玩家继续接球连击！
+                ball.isSuper = false;
+                ball.r = 13;
+                ball.dmg = Math.max(100, Math.round(ball.dmg * 0.75));
+                physicsSystem.resolveBallBrickBounce(ball, b);
+              }
             }
           } else {
-            // Realistic brick bounce
+            // Realistic brick bounce (普通足球撞砖物理反弹)
             physicsSystem.resolveBallBrickBounce(ball, b);
             this.triggerImpact(ball.x, ball.y, ball.dmg, false, 35);
-            ball.pierceLeft--;
-            if (ball.pierceLeft <= 0) {
-              this.balls.splice(i, 1);
-              this.scheduleGameEndCheck();
+            if (ball.isSkillProjectile) {
+              if (ball.pierceLeft !== undefined) ball.pierceLeft--;
+              if ((ball.pierceLeft || 0) <= 0) {
+                this.balls.splice(i, 1);
+                this.scheduleGameEndCheck();
+              }
             }
+            // 核心设计：常规打砖块足球撞击砖块绝对不消失！受重力自然回落，等待玩家接球连踢！
           }
           break;
         }
@@ -930,8 +949,8 @@ export class GameManager extends Component {
         ball.vx = Math.cos(reboundAngle) * newSpeed;
         ball.vy = Math.sin(reboundAngle) * newSpeed;
         ball.y = CONFIG.GROUND_Y + 28; // 弹起脱离草地判定区
-        ball.dmg = Math.round(100 * modeCfg.dmgMultiplier * dmgMult);
-        ball.pierceLeft = Math.max(ball.pierceLeft, 3); // 恢复穿透与弹跳次数
+        ball.pierceLeft = Math.max(ball.pierceLeft || 0, 5); // 恢复连踢超级穿透次数
+        ball.isSkillProjectile = false; // 保证连击球绝对为可接打砖块常规足球
 
         if (count >= 2) {
           ball.isSuper = true; // 连击化身金光烈焰球
