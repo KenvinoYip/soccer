@@ -46,6 +46,21 @@ enum GameState { PLAYING, GAME_OVER }
 const COMBO_THRESHOLDS = [2, 5, 10, 20];
 const COMBO_MULTIPLIERS = [1.5, 2, 3, 5];
 
+// ─── Universal Canvas2D roundRect polyfill ──────────────────────
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x: number, y: number, w: number, h: number, r: any = 0) {
+    let rad = typeof r === 'number' ? r : (Array.isArray(r) ? r[0] : 0);
+    if (w < 2 * rad) rad = w / 2;
+    if (h < 2 * rad) rad = h / 2;
+    this.moveTo(x + rad, y);
+    this.arcTo(x + w, y, x + w, y + h, rad);
+    this.arcTo(x + w, y + h, x, y + h, rad);
+    this.arcTo(x, y + h, x, y, rad);
+    this.arcTo(x, y, x + w, y, rad);
+    return this;
+  };
+}
+
 @ccclass('GameManager')
 export class GameManager extends Component {
 
@@ -1031,94 +1046,98 @@ export class GameManager extends Component {
   // ─────────────────────────────────────────────────────────
 
   private render() {
-    const gfx = this.gfx;
-    gfx.clear();
+    try {
+      const gfx = this.gfx;
+      gfx.clear();
 
-    if (this.ctx) {
-      this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-    }
-
-    if (this.shakeOffX !== 0 || this.shakeOffY !== 0) {
-      this.node.setPosition(this.shakeOffX, this.shakeOffY, 0);
-    } else {
-      this.node.setPosition(0, 0, 0);
-    }
-
-    const W = CONFIG.W, H = CONFIG.H;
-
-    // 1. Stadium Background
-    drawBackground(gfx, W, H, this.flashAlpha, this.shakeOffX, this.shakeOffY);
-
-    // 1.5. Dynamic Landing Target Indicator (草地截球落点预警光圈与准星)
-    drawBallLandingMarker(gfx, this.balls, this.player.x);
-
-    // 2. Bricks with Physics Gravity Falling
-    for (const b of this.bricks) {
-      if (b.targetY !== undefined && b.y > b.targetY) {
-        b.vy = (b.vy || 0) - 0.7;
-        b.y += b.vy;
-        if (b.y <= b.targetY) {
-          b.y = b.targetY;
-          b.vy = 0;
-        }
+      if (this.ctx) {
+        this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
       }
-      b.shakeX *= -0.55;
-      if (b.hitFlash > 0) b.hitFlash--;
-      drawBrick(gfx, b);
-    }
 
-    // 3. Aim trajectory (when charging regular ball - starts from Bruce Lee's actual location with gentle 52% speed)
-    if (this.isCharging) {
-      const startX = this.player.x;
-      const startY = CONFIG.GROUND_Y + 20;
-      const dx = this.aimX - startX;
-      const dy = this.aimY - startY;
-      const len = Math.hypot(dx, dy) || 1;
-      const zone = this.getPowerZone(this.powerPos);
-      const isSuper = zone === 'RED';
-      const modeCfg = CONFIG.MODES[this.mode];
-      const speed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * (isSuper ? 1.20 : 1.0) * 0.52;
+      if (this.shakeOffX !== 0 || this.shakeOffY !== 0) {
+        this.node.setPosition(this.shakeOffX, this.shakeOffY, 0);
+      } else {
+        this.node.setPosition(0, 0, 0);
+      }
 
-      const trajectory = physicsSystem.predictTrajectory(
-        startX, startY,
-        (dx / len) * speed,
-        (dy / len) * speed,
-        CONFIG.GRAVITY, 45
-      );
-      drawAimLine(gfx, trajectory, isSuper);
-    }
+      const W = CONFIG.W, H = CONFIG.H;
 
-    // 4. Goalkeeper
-    this.keeper.draw(gfx);
+      // 1. Stadium Background
+      drawBackground(gfx, W, H, this.flashAlpha, this.shakeOffX, this.shakeOffY);
 
-    // 5. Balls
-    for (const ball of this.balls) {
-      drawBall(gfx, ball);
-    }
+      // 1.5. Dynamic Landing Target Indicator (草地截球落点预警光圈与准星)
+      drawBallLandingMarker(gfx, this.balls, this.player.x);
 
-    // 6. Particles
-    particlePool.draw(gfx);
+      // 2. Bricks with Physics Gravity Falling
+      for (const b of this.bricks) {
+        if (b.targetY !== undefined && b.y > b.targetY) {
+          b.vy = (b.vy || 0) - 0.7;
+          b.y += b.vy;
+          if (b.y <= b.targetY) {
+            b.y = b.targetY;
+            b.vy = 0;
+          }
+        }
+        b.shakeX *= -0.55;
+        if (b.hitFlash > 0) b.hitFlash--;
+        drawBrick(gfx, b);
+      }
 
-    // 7. Player (Real Anime Hero Character Sprite)
-    this.player.draw(gfx, this.ctx);
+      // 3. Aim trajectory (when charging regular ball - starts from Bruce Lee's actual location with gentle 52% speed)
+      if (this.isCharging) {
+        const startX = this.player.x;
+        const startY = CONFIG.GROUND_Y + 20;
+        const dx = this.aimX - startX;
+        const dy = this.aimY - startY;
+        const len = Math.hypot(dx, dy) || 1;
+        const zone = this.getPowerZone(this.powerPos);
+        const isSuper = zone === 'RED';
+        const modeCfg = CONFIG.MODES[this.mode];
+        const speed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * (isSuper ? 1.20 : 1.0) * 0.52;
 
-    // 8. Shockwaves
-    shockWavePool.draw(gfx);
+        const trajectory = physicsSystem.predictTrajectory(
+          startX, startY,
+          (dx / len) * speed,
+          (dy / len) * speed,
+          CONFIG.GRAVITY, 45
+        );
+        drawAimLine(gfx, trajectory, isSuper);
+      }
 
-    // 9. Floating texts & damage numbers on 2D overlay
-    if (this.ctx) {
-      floatTextPool.draw(gfx, this.ctx);
-    }
+      // 4. Goalkeeper
+      this.keeper.draw(gfx);
 
-    // 10. HUD (Power bar, Ammo, Top Status Bar)
-    this.drawHUD(gfx);
+      // 5. Balls
+      for (const ball of this.balls) {
+        drawBall(gfx, ball);
+      }
 
-    // 11. Ultimate Skills Buttons (Direct Click to Cast, 10s CD)
-    skillSystem.draw(gfx, this.ctx);
+      // 6. Particles
+      particlePool.draw(gfx);
 
-    // 12. 必杀技特写·半透明武魂神影 (Burst Cut-In Martial Avatar)
-    if (this.ctx) {
-      burstCutIn.draw(this.ctx, this.player.getAvatarSprite());
+      // 7. Player (Real Anime Hero Character Sprite)
+      this.player.draw(gfx, this.ctx);
+
+      // 8. Shockwaves
+      shockWavePool.draw(gfx);
+
+      // 9. Floating texts & damage numbers on 2D overlay
+      if (this.ctx) {
+        floatTextPool.draw(gfx, this.ctx);
+      }
+
+      // 10. HUD (Power bar, Ammo, Top Status Bar)
+      this.drawHUD(gfx);
+
+      // 11. Ultimate Skills Buttons (Direct Click to Cast, 10s CD)
+      skillSystem.draw(gfx, this.ctx);
+
+      // 12. 必杀技特写·半透明武魂神影 (Burst Cut-In Martial Avatar)
+      if (this.ctx) {
+        burstCutIn.draw(this.ctx, this.player.getAvatarSprite());
+      }
+    } catch (renderErr) {
+      console.error('[GameManager render error]:', renderErr);
     }
   }
 

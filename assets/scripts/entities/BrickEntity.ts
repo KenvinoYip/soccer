@@ -5,12 +5,13 @@ import { Color, Graphics } from 'cc';
 import { BrickData, CONFIG } from '../Config';
 
 // ── 颜色解析工具 ────────────────────────────────────────────
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const h = hex.replace('#', '');
+function hexToRgb(hex?: string): { r: number; g: number; b: number } {
+  let h = (hex || '#c0392b').replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
   return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
+    r: parseInt(h.substring(0, 2), 16) || 0,
+    g: parseInt(h.substring(2, 4), 16) || 0,
+    b: parseInt(h.substring(4, 6), 16) || 0,
   };
 }
 

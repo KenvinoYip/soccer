@@ -244,8 +244,7 @@ export class PlayerEntity {
         }
 
         // 3. Draw Real High-Res Anime Character Sprite on 2D Overlay Canvas
-        const hasSprite = !!(this._transparentCanvas || this._heroImg || this._transparentKickCanvas || this._heroKickImg);
-        if (ctx && hasSprite) {
+        if (ctx) {
             const cw = ctx.canvas.width;
             const ch = ctx.canvas.height;
             const scale = Math.min(cw / 440, ch / 780);
@@ -255,7 +254,7 @@ export class PlayerEntity {
             ctx.save();
 
             if (this.kickFrame >= 2) {
-                // ── A. Bruce Lee Multi-Action Martial Arts Kicks (多招式真功夫特写) ──
+                // ── A. Multi-Action Martial Arts Kicks (多招式真功夫特写) ──
                 const kickSource = this._transparentKickCanvas || this._heroKickImg;
                 if (kickSource) {
                     const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
@@ -264,13 +263,13 @@ export class PlayerEntity {
                     this._drawIdleSprite(ctx, cx, cy, scale);
                 }
             } else {
-                // ── B. Bruce Lee Jeet Kune Do Combat Guard (截拳道灵动戒备姿态) ──
+                // ── B. Neo-Ink Wash Shaolin Shadow Ninja Guard Stance ──
                 this._drawIdleSprite(ctx, cx, cy, scale);
             }
 
             ctx.restore();
-        } else if (!hasSprite) {
-            // Fallback: draw stylish Shaolin monk on Graphics if sprites not yet ready
+        } else {
+            // Fallback: draw stylish Shaolin monk on Graphics if 2D context not available
             this._drawVectorFallback(gfx, currentPx, py);
         }
 
@@ -618,8 +617,10 @@ export class PlayerEntity {
         // Ball ground contact shadow
         ctx.save();
         ctx.fillStyle = 'rgba(10, 15, 25, 0.45)';
+        ctx.translate(ballX, ballY + ballR * 0.9);
+        ctx.scale(1, 0.38);
         ctx.beginPath();
-        ctx.ellipse(ballX, ballY + ballR * 0.9, ballR * 0.9, ballR * 0.35, 0, 0, Math.PI * 2);
+        ctx.arc(0, 0, ballR * 0.9, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
@@ -814,10 +815,8 @@ export class PlayerEntity {
 
         // Ninja Combat Sneakers (Dark cleats with gold accent)
         ctx.fillStyle = '#0B0F15';
-        ctx.beginPath();
-        ctx.roundRect(-27 * scale, 32 * scale, 15 * scale, 5 * scale, 2 * scale);
-        ctx.roundRect(14 * scale, 30 * scale, 16 * scale, 5 * scale, 2 * scale);
-        ctx.fill();
+        ctx.fillRect(-27 * scale, 32 * scale, 15 * scale, 5 * scale);
+        ctx.fillRect(14 * scale, 30 * scale, 16 * scale, 5 * scale);
 
         // Torso: Muscular athletic shadow silhouette
         ctx.fillStyle = '#151D2A';
@@ -1124,7 +1123,6 @@ export class PlayerEntity {
         gfx.fillColor = hexToColor('#C0392B', 255);
         gfx.roundRect(px - 16, py + 38, 32, 8, 4);
         gfx.fill();
-        gfx.beginPath();
         gfx.moveTo(px - 14, py + 42);
         gfx.lineTo(px - 32, py + 32 + Math.sin(this._animTimer * 4) * 6);
         gfx.lineTo(px - 14, py + 36);

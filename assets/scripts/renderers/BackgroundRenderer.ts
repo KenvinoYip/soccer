@@ -98,7 +98,7 @@ export function drawBackground(
     gfx.lineTo(hw, 100);
     gfx.lineTo(hw, 40);
     gfx.lineTo(-hw, 40);
-    gfx.closePath();
+    gfx.close();
     gfx.fill();
 
     // Mid mountain range (Darker jagged peaks)
@@ -112,7 +112,7 @@ export function drawBackground(
     gfx.lineTo(hw, 70);
     gfx.lineTo(hw, -20);
     gfx.lineTo(-hw, -20);
-    gfx.closePath();
+    gfx.close();
     gfx.fill();
 
     // Ethereal drifting mist ribbon between mountains
@@ -132,7 +132,7 @@ export function drawBackground(
     gfx.lineTo(-145, 142); // flying eave curve tip
     gfx.lineTo(-175, 165);
     gfx.lineTo(-220, 165);
-    gfx.closePath();
+    gfx.close();
     gfx.fill();
 
     // Right Pagoda roof (mirror)
@@ -141,7 +141,7 @@ export function drawBackground(
     gfx.lineTo(145, 142);
     gfx.lineTo(175, 165);
     gfx.lineTo(220, 165);
-    gfx.closePath();
+    gfx.close();
     gfx.fill();
 
     // Wind bell dot on eave tips

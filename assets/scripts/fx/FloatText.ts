@@ -87,9 +87,12 @@ export class FloatTextPool {
                 // 1. Vermilion Calligraphy Seal Stamp Box (朱砂红印框)
                 ctx.fillStyle = '#C0392B';
                 ctx.shadowColor = '#E74C3C';
-                ctx.shadowBlur = 6 * scale;
                 ctx.beginPath();
-                ctx.roundRect(sealBoxX, sealBoxY, sealBoxW, sealBoxH, 3 * scale);
+                if (typeof (ctx as any).roundRect === 'function') {
+                    (ctx as any).roundRect(sealBoxX, sealBoxY, sealBoxW, sealBoxH, 3 * scale);
+                } else {
+                    ctx.rect(sealBoxX, sealBoxY, sealBoxW, sealBoxH);
+                }
                 ctx.fill();
 
                 ctx.strokeStyle = '#FADBD8';
