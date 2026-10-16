@@ -26,166 +26,179 @@ export function drawBackground(
     const hw = W / 2;
     const hh = H / 2;
 
-    // ─── 1. Night sky gradient (12 horizontal bands) ───────────────────────
-    const skyBands = 12;
-    const bandH = (hh + 50) / skyBands; // from top (hh) down to y=-50
+    // ─── 1. Deep Ink Wash Night Sky Gradient (新国风玄夜墨韵渐变) ───────────
+    const skyBands = 14;
+    const bandH = (hh + 50) / skyBands;
     for (let i = 0; i < skyBands; i++) {
         const t = i / (skyBands - 1);
-        const r = Math.round(8 + t * 14);
-        const g = Math.round(12 + t * (-4));   // stays dark
-        const b = Math.round(25 + t * 17);
+        const r = Math.round(6 + t * 24);
+        const g = Math.round(8 + t * 4);
+        const b = Math.round(16 + t * 20);
         const bandTopY = hh - i * bandH;
         gfx.fillColor = new Color(r, g, b, 255);
-        gfx.rect(-hw, bandTopY - bandH, W, bandH + 1); // +1 avoids 1-px gaps
+        gfx.rect(-hw, bandTopY - bandH, W, bandH + 1);
         gfx.fill();
     }
 
-    // ─── 2. Moon (top-right) ────────────────────────────────────────────────
-    const moonX = 160;
-    const moonY = 310;
-    // Soft glow rings
-    const moonGlows = [{ r: 28, a: 15 }, { r: 22, a: 30 }, { r: 16, a: 60 }];
-    for (const g of moonGlows) {
-        gfx.fillColor = new Color(255, 255, 255, g.a);
-        gfx.circle(moonX, moonY, g.r);
+    // ─── 2. Colossal Crimson Blood Moon (绯红血月悬空) ────────────────────────
+    const moonX = 135;
+    const moonY = 275;
+    // Multi-layer ominous crimson lunar halos
+    const bloodHalos = [
+        { r: 72, a: 16, c: new Color(231, 76, 60) },
+        { r: 54, a: 32, c: new Color(231, 76, 60) },
+        { r: 42, a: 65, c: new Color(243, 156, 18) },
+        { r: 35, a: 110, c: new Color(255, 80, 50) },
+    ];
+    for (const h of bloodHalos) {
+        gfx.fillColor = new Color(h.c.r, h.c.g, h.c.b, h.a);
+        gfx.circle(moonX, moonY, h.r);
         gfx.fill();
     }
-    // Moon face
-    gfx.fillColor = new Color(245, 245, 220, 255);
-    gfx.circle(moonX, moonY, 13);
-    gfx.fill();
-    // Subtle crater shadow
-    gfx.fillColor = new Color(210, 210, 190, 60);
-    gfx.circle(moonX + 3, moonY - 2, 5);
+    // Blood moon solid face
+    gfx.fillColor = new Color(214, 48, 49, 255);
+    gfx.circle(moonX, moonY, 30);
     gfx.fill();
 
-    // ─── 3. Stars ───────────────────────────────────────────────────────────
+    // Lunar ink crater silhouettes (血月暗斑)
+    gfx.fillColor = new Color(130, 20, 20, 150);
+    gfx.circle(moonX - 7, moonY + 6, 9);  gfx.fill();
+    gfx.circle(moonX + 9, moonY - 5, 12); gfx.fill();
+    gfx.circle(moonX - 4, moonY - 10, 6); gfx.fill();
+
+    // Subtle golden moon rim
+    gfx.strokeColor = new Color(255, 230, 150, 120);
+    gfx.lineWidth = 1.2;
+    gfx.circle(moonX, moonY, 30);
+    gfx.stroke();
+
+    // ─── 3. Distant Ink Wash Stars & Drifting Embers (星芒与风动余烬) ────────
     for (let i = 0; i < STARS.length; i++) {
         const s = STARS[i];
-        const alpha = 180 + (i * 7) % 75;
-        gfx.fillColor = new Color(255, 255, 255, alpha);
-        gfx.circle(s.x, s.y, s.r);
+        const isEmber = i % 4 === 0;
+        if (isEmber) {
+            gfx.fillColor = new Color(255, 71, 87, 160 + (i * 9) % 85);
+            gfx.circle(s.x, s.y, s.r * 1.3);
+        } else {
+            gfx.fillColor = new Color(240, 245, 255, 120 + (i * 7) % 75);
+            gfx.circle(s.x, s.y, s.r);
+        }
         gfx.fill();
     }
 
-    // ─── 4. Stadium stands (left + right) ───────────────────────────────────
-    // Left stand: trapezoid (-220 to -80, y 50→200)
-    gfx.fillColor = new Color(18, 35, 18, 255);
-    // Draw as thick vertical bands (no polygon API in Cocos Graphics without path)
-    gfx.moveTo(-220, 50);
-    gfx.lineTo(-80, 50);
-    gfx.lineTo(-90, 200);
-    gfx.lineTo(-220, 200);
+    // ─── 4. Layered Misty Mountain Peaks (层峦叠嶂水墨群山) ──────────────────
+    // Far mountain range (Soft indigo mist)
+    gfx.fillColor = new Color(14, 20, 32, 230);
+    gfx.moveTo(-hw, 80);
+    gfx.lineTo(-140, 145);
+    gfx.lineTo(-60, 110);
+    gfx.lineTo(20, 165);
+    gfx.lineTo(95, 125);
+    gfx.lineTo(170, 180);
+    gfx.lineTo(hw, 100);
+    gfx.lineTo(hw, 40);
+    gfx.lineTo(-hw, 40);
+    gfx.closePath();
     gfx.fill();
-    // Right stand: mirror
-    gfx.moveTo(220, 50);
-    gfx.lineTo(80, 50);
-    gfx.lineTo(90, 200);
-    gfx.lineTo(220, 200);
+
+    // Mid mountain range (Darker jagged peaks)
+    gfx.fillColor = new Color(9, 13, 22, 255);
+    gfx.moveTo(-hw, 60);
+    gfx.lineTo(-170, 115);
+    gfx.lineTo(-100, 75);
+    gfx.lineTo(-20, 130);
+    gfx.lineTo(60, 85);
+    gfx.lineTo(130, 135);
+    gfx.lineTo(hw, 70);
+    gfx.lineTo(hw, -20);
+    gfx.lineTo(-hw, -20);
+    gfx.closePath();
     gfx.fill();
 
-    // Stand seats — rows of colored dots
-    for (let row = 0; row < 3; row++) {
-        const rowY = 65 + row * 22;
-        // Left stand seats
-        for (let col = 0; col < 8; col++) {
-            const seatX = -215 + col * 16;
-            const heat = (row + col) % 3;
-            const colors = [
-                new Color(60, 20, 20, 200),
-                new Color(20, 60, 20, 200),
-                new Color(20, 20, 60, 200),
-            ];
-            gfx.fillColor = colors[heat];
-            gfx.circle(seatX, rowY, 4);
-            gfx.fill();
-        }
-        // Right stand seats (mirror)
-        for (let col = 0; col < 8; col++) {
-            const seatX = 215 - col * 16;
-            const heat = (row + col + 1) % 3;
-            const colors = [
-                new Color(60, 20, 20, 200),
-                new Color(20, 60, 20, 200),
-                new Color(20, 20, 60, 200),
-            ];
-            gfx.fillColor = colors[heat];
-            gfx.circle(seatX, rowY, 4);
-            gfx.fill();
-        }
-    }
+    // Ethereal drifting mist ribbon between mountains
+    gfx.fillColor = new Color(200, 215, 235, 18);
+    gfx.rect(-hw, 85, W, 14);
+    gfx.fill();
+    gfx.fillColor = new Color(200, 215, 235, 12);
+    gfx.rect(-hw, 65, W, 22);
+    gfx.fill();
 
-    // ─── 5. Crowd silhouettes (34 heads near top of stands) ─────────────────
-    for (let i = 0; i < 34; i++) {
-        const cx = -200 + i * 12;
-        const cy = 55 + Math.sin(i * 0.9) * 8 + ((i * 31) % 12);
-        const headR = 5 + ((i * 13) % 5);
-        const isLight = i % 2 === 0;
-        gfx.fillColor = isLight
-            ? new Color(50, 70, 50, 220)
-            : new Color(35, 50, 35, 220);
-        gfx.circle(cx, cy, headR);
-        gfx.fill();
-    }
+    // ─── 5. Shaolin Pagoda Flying Eave Silhouettes (少林古刹飞檐角楼) ─────────
+    // Left Pagoda roof (x: -220 to -140, y: 130 to 185)
+    gfx.fillColor = new Color(7, 10, 16, 255);
+    // Roof body
+    gfx.moveTo(-220, 130);
+    gfx.lineTo(-155, 130);
+    gfx.lineTo(-145, 142); // flying eave curve tip
+    gfx.lineTo(-175, 165);
+    gfx.lineTo(-220, 165);
+    gfx.closePath();
+    gfx.fill();
 
-    // ─── 6. Stadium flood lights (4 sources) ────────────────────────────────
-    const lightPositions = [
-        { x: -210, y: 200 },
-        { x: -210, y: 320 },
-        { x: 210,  y: 200 },
-        { x: 210,  y: 320 },
-    ];
-    for (const lp of lightPositions) {
-        // Bloom rings
-        const lightGlows = [{ r: 20, a: 12 }, { r: 12, a: 28 }, { r: 6, a: 55 }];
-        for (const lg of lightGlows) {
-            gfx.fillColor = new Color(255, 255, 230, lg.a);
-            gfx.circle(lp.x, lp.y, lg.r);
-            gfx.fill();
-        }
-        // Bright center
-        gfx.fillColor = new Color(255, 255, 200, 230);
-        gfx.circle(lp.x, lp.y, 4);
-        gfx.fill();
-    }
+    // Right Pagoda roof (mirror)
+    gfx.moveTo(220, 130);
+    gfx.lineTo(155, 130);
+    gfx.lineTo(145, 142);
+    gfx.lineTo(175, 165);
+    gfx.lineTo(220, 165);
+    gfx.closePath();
+    gfx.fill();
 
-    // ─── 7. Grass pitch (y from -390 to -240) ───────────────────────────────
-    gfx.fillColor = new Color(22, 160, 90, 255);
+    // Wind bell dot on eave tips
+    gfx.fillColor = new Color(243, 156, 18, 160);
+    gfx.circle(-145, 140, 2); gfx.fill();
+    gfx.circle(145, 140, 2);  gfx.fill();
+
+    // ─── 6. Ancient Martial Flagstone Ground (青石校场擂台 × 足球场线) ───────
+    // Dark green weathered flagstone pitch base
+    gfx.fillColor = new Color(18, 38, 28, 255);
     gfx.rect(-hw, -390, W, 150);
     gfx.fill();
 
-    // ─── 8. Grass stripes (8 alternating bands) ──────────────────────────────
-    const stripeW = W / 8;
+    // Alternating flagstone tiles
+    const tileW = W / 8;
     for (let i = 0; i < 8; i++) {
         if (i % 2 === 0) {
-            gfx.fillColor = new Color(30, 175, 100, 200);
-            gfx.rect(-hw + i * stripeW, -390, stripeW, 150);
+            gfx.fillColor = new Color(24, 48, 35, 180);
+            gfx.rect(-hw + i * tileW, -390, tileW, 150);
             gfx.fill();
         }
     }
 
-    // ─── 9. Ground line ──────────────────────────────────────────────────────
-    gfx.strokeColor = new Color(255, 255, 255, 150);
-    gfx.lineWidth = 1.5;
+    // Subtle stone seam grid lines
+    gfx.strokeColor = new Color(10, 24, 16, 160);
+    gfx.lineWidth = 1.0;
+    gfx.moveTo(-hw, -315); gfx.lineTo(hw, -315); gfx.stroke();
+
+    // ─── 7. Soccer Pitch Calligraphy Markings (古风水墨白灰球场标线) ────────
+    // Touchline / Ground line (y = -240)
+    gfx.strokeColor = new Color(245, 245, 250, 175);
+    gfx.lineWidth = 2.0;
     gfx.moveTo(-hw, -240);
     gfx.lineTo(hw, -240);
     gfx.stroke();
 
-    // ─── 10. Penalty box marking ─────────────────────────────────────────────
-    gfx.strokeColor = new Color(255, 255, 255, 120);
-    gfx.lineWidth = 1.5;
-    gfx.rect(-80, -280, 160, 40);
+    // Penalty Area Box (禁区方正边界)
+    gfx.strokeColor = new Color(245, 245, 250, 140);
+    gfx.lineWidth = 1.8;
+    gfx.rect(-85, -285, 170, 45);
     gfx.stroke();
 
-    // Center spot
-    gfx.fillColor = new Color(255, 255, 255, 100);
-    gfx.circle(0, -240, 3);
+    // Penalty Arc (禁区弧顶)
+    gfx.strokeColor = new Color(245, 245, 250, 120);
+    gfx.lineWidth = 1.5;
+    gfx.arc(0, -285, 32, 0, Math.PI, true);
+    gfx.stroke();
+
+    // Center Penalty Spot (点球白金石印)
+    gfx.fillColor = new Color(255, 255, 255, 180);
+    gfx.circle(0, -240, 3.5);
     gfx.fill();
 
-    // ─── 11. Flash overlay ───────────────────────────────────────────────────
+    // ─── 8. Golden Flash Overlay on Mega Kicks ──────────────────────────────
     if (flashAlpha > 0) {
         const fa = Math.floor(Math.max(0, Math.min(1, flashAlpha)) * 255);
-        gfx.fillColor = new Color(255, 255, 255, fa);
+        gfx.fillColor = new Color(255, 250, 235, fa);
         gfx.rect(-hw, -hh, W, H);
         gfx.fill();
     }

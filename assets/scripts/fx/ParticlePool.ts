@@ -54,6 +54,32 @@ export class ParticlePool {
     }
   }
 
+  spawnInkSplatter(x: number, y: number, count = 10): void {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2.5 + Math.random() * 7.5;
+      const r = 2.0 + Math.random() * 3.2;
+      const life = 24 + Math.random() * 18;
+      const isRedEmber = Math.random() < 0.22;
+      const color = isRedEmber ? '#e74c3c' : (i % 2 === 0 ? '#0f172a' : '#1e293b');
+      this.spawn({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        r,
+        life,
+        maxLife: life,
+        color,
+        type: 'spark',
+        rot: 0,
+        vRot: 0,
+        w: 0,
+        h: 0,
+      });
+    }
+  }
+
   spawnSmoke(x: number, y: number, count = 4): void {
     for (let i = 0; i < count; i++) {
       const vx = (Math.random() - 0.5) * 1;

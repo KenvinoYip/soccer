@@ -97,106 +97,164 @@ export function applyWallGravity(bricks: BrickData[], _wallTop: number, wallBott
   }
 }
 
-// ── 渲染单个砖块 ─────────────────────────────────────────────
+// ── 渲染单个少林符文玄石碑 ──────────────────────────────────────────
 export function drawBrick(gfx: Graphics, b: BrickData): void {
   const x  = b.x + b.shakeX;
   const y  = b.y;
   const w  = b.w;
   const h  = b.h;
 
-  const alpha = b.crackLevel >= 3 ? 180 : 255;
+  const alpha = b.crackLevel >= 3 ? 190 : 255;
 
-  // Hit flash override
+  // Hit flash override (白金破击光华)
   if (b.hitFlash > 0) {
-    gfx.fillColor = new Color(255, 255, 255, alpha);
+    gfx.fillColor = new Color(255, 250, 220, alpha);
     gfx.rect(x, y, w, h);
     gfx.fill();
+    return;
+  }
+
+  // 1. Base Slate Stone Fill (水墨玄青古石基底)
+  const c = hexToRgb(b.color);
+  // Blend with dark ink slate for rich texture
+  const stoneR = Math.round(c.r * 0.45 + 16);
+  const stoneG = Math.round(c.g * 0.45 + 22);
+  const stoneB = Math.round(c.b * 0.45 + 32);
+  gfx.fillColor = new Color(stoneR, stoneG, stoneB, alpha);
+  gfx.rect(x, y, w, h);
+  gfx.fill();
+
+  // 2. Inner Ink Carving Box (内凹石刻凹槽)
+  gfx.fillColor = new Color(Math.round(stoneR * 1.25), Math.round(stoneG * 1.25), Math.round(stoneB * 1.25), alpha);
+  gfx.rect(x + 2, y + 2, w - 4, h - 4);
+  gfx.fill();
+
+  // 3. Specialized Type Aesthetics
+  if (b.type === 'metal') {
+    // ── 少林金钟罩·罗汉铁壁 ──
+    // Metallic sheen band
+    gfx.fillColor = new Color(220, 225, 235, 45);
+    gfx.rect(x + 3, y + 3, w * 0.35, h - 6);
+    gfx.fill();
+
+    // 4 Golden Corner Rivets (四角罗汉金钉)
+    const rivetColor = new Color(255, 200, 50, 220);
+    gfx.fillColor = rivetColor;
+    gfx.circle(x + 4, y + 4, 1.8); gfx.fill();
+    gfx.circle(x + w - 4, y + 4, 1.8); gfx.fill();
+    gfx.circle(x + 4, y + h - 5, 1.8); gfx.fill();
+    gfx.circle(x + w - 4, y + h - 5, 1.8); gfx.fill();
+
+    // Ancient Seal Rune: 【罡】(Shaolin Vajra Armor)
+    const cx = x + w / 2;
+    const cy = y + h / 2 - 1;
+    gfx.strokeColor = new Color(255, 215, 0, 160);
+    gfx.lineWidth = 1.2;
+    // Outer rune box
+    gfx.rect(cx - 7, cy - 6, 14, 12);
+    gfx.stroke();
+    // Inner cross lines
+    gfx.moveTo(cx - 4, cy); gfx.lineTo(cx + 4, cy); gfx.stroke();
+    gfx.moveTo(cx, cy - 4); gfx.lineTo(cx, cy + 4); gfx.stroke();
+  } else if (b.type === 'tnt') {
+    // ── 烈火霹雳·雷火神碑 ──
+    // Inner glowing crimson seal box
+    gfx.fillColor = new Color(185, 28, 28, 160);
+    gfx.rect(x + 3, y + 3, w - 6, h - 6);
+    gfx.fill();
+
+    // Fuse flame spark at top center
+    gfx.fillColor = new Color(255, 220, 50, 240);
+    gfx.circle(x + w / 2, y + 3, 2.8);
+    gfx.fill();
+    gfx.fillColor = new Color(255, 70, 0, 180);
+    gfx.circle(x + w / 2, y + 3, 4.5);
+    gfx.fill();
+
+    // Ancient Thunder Rune: 【雷】
+    const cx = x + w / 2;
+    const cy = y + h / 2 - 1;
+    gfx.strokeColor = new Color(255, 240, 100, 220);
+    gfx.lineWidth = 1.4;
+    gfx.moveTo(cx - 6, cy - 4); gfx.lineTo(cx + 6, cy - 4); gfx.stroke();
+    gfx.moveTo(cx, cy - 4);     gfx.lineTo(cx - 3, cy + 1); gfx.lineTo(cx + 4, cy + 1); gfx.lineTo(cx - 1, cy + 6); gfx.stroke();
   } else {
-    // Base fill
-    const c = hexToRgb(b.color);
-    gfx.fillColor = new Color(c.r, c.g, c.b, alpha);
-    gfx.rect(x, y, w, h);
-    gfx.fill();
-
-    // Metal shimmer effect
-    if (b.type === 'metal') {
-      gfx.fillColor = new Color(200, 200, 210, 60);
-      gfx.rect(x + 1, y + 1, w * 0.4, h - 2);
-      gfx.fill();
-      gfx.fillColor = new Color(255, 255, 255, 30);
-      gfx.rect(x + 1, y + 1, w - 2, 3);
-      gfx.fill();
-    }
+    // ── 普通符文玄石碑：刻印【封】/【玄】古篆印痕 ──
+    const cx = x + w / 2;
+    const cy = y + h / 2 - 1;
+    const runeColor = (b.row + b.col) % 2 === 0
+      ? new Color(0, 220, 255, 110)
+      : new Color(255, 190, 50, 110);
+    gfx.strokeColor = runeColor;
+    gfx.lineWidth = 1.0;
+    // Ancient seal emblem
+    gfx.circle(cx, cy, 5.5);
+    gfx.stroke();
+    gfx.moveTo(cx - 3, cy); gfx.lineTo(cx + 3, cy); gfx.stroke();
   }
 
-  // 3D Bevel — top-left light edges
-  gfx.strokeColor = new Color(255, 255, 255, 60);
-  gfx.lineWidth = 1.5;
-  gfx.moveTo(x, y + h);
-  gfx.lineTo(x, y);
-  gfx.lineTo(x + w, y);
+  // 4. 3D Ancient Stone Bevel Edges (石碑风化阴阳切角)
+  gfx.strokeColor = new Color(255, 255, 255, 50);
+  gfx.lineWidth = 1.2;
+  gfx.moveTo(x, y + h); gfx.lineTo(x, y); gfx.lineTo(x + w, y);
   gfx.stroke();
 
-  // Bottom-right dark edges
-  gfx.strokeColor = new Color(0, 0, 0, 70);
-  gfx.lineWidth = 1.5;
-  gfx.moveTo(x + w, y);
-  gfx.lineTo(x + w, y + h);
-  gfx.lineTo(x, y + h);
+  gfx.strokeColor = new Color(0, 0, 0, 95);
+  gfx.lineWidth = 1.2;
+  gfx.moveTo(x + w, y); gfx.lineTo(x + w, y + h); gfx.lineTo(x, y + h);
   gfx.stroke();
 
-  // TNT label
-  if (b.type === 'tnt' && b.hitFlash <= 0) {
-    // Draw fuse spark dot
-    gfx.fillColor = new Color(255, 220, 0, 220);
-    gfx.circle(x + w / 2, y + 4, 3);
-    gfx.fill();
-    // Inner red box
-    gfx.fillColor = new Color(180, 40, 20, 200);
-    gfx.rect(x + 4, y + 8, w - 8, h - 14);
-    gfx.fill();
-  }
-
-  // Crack lines
+  // 5. Glowing Runic Energy Fracture Cracks (符文裂痕迸发流光)
   if (b.crackLevel > 0) {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    const ca = b.crackLevel >= 3 ? 200 : b.crackLevel >= 2 ? 150 : 100;
-    gfx.strokeColor = new Color(20, 10, 10, ca);
-    gfx.lineWidth = b.crackLevel >= 2 ? 2 : 1;
+    const crackGlow = b.type === 'tnt'
+      ? new Color(255, 60, 20, 200)
+      : (b.type === 'metal' ? new Color(255, 215, 0, 190) : new Color(0, 229, 255, 180));
 
-    // Crack pattern 1
-    gfx.moveTo(cx - 3, y + 2);
-    gfx.lineTo(cx + 5, cy);
-    gfx.lineTo(cx - 2, y + h - 3);
+    // Outer dark fissure
+    gfx.strokeColor = new Color(10, 12, 18, 220);
+    gfx.lineWidth = b.crackLevel >= 2 ? 2.5 : 1.8;
+    gfx.moveTo(cx - 3, y + 2); gfx.lineTo(cx + 5, cy); gfx.lineTo(cx - 2, y + h - 3);
+    gfx.stroke();
+
+    // Inner glowing energy fracture
+    gfx.strokeColor = crackGlow;
+    gfx.lineWidth = 1.2;
+    gfx.moveTo(cx - 3, y + 2); gfx.lineTo(cx + 5, cy); gfx.lineTo(cx - 2, y + h - 3);
     gfx.stroke();
 
     if (b.crackLevel >= 2) {
-      gfx.moveTo(x + 4, cy - 4);
-      gfx.lineTo(cx + 3, cy + 6);
-      gfx.lineTo(x + w - 4, cy + 2);
+      gfx.strokeColor = new Color(10, 12, 18, 220);
+      gfx.lineWidth = 2.2;
+      gfx.moveTo(x + 4, cy - 4); gfx.lineTo(cx + 3, cy + 6); gfx.lineTo(x + w - 4, cy + 2);
+      gfx.stroke();
+
+      gfx.strokeColor = crackGlow;
+      gfx.lineWidth = 1.2;
+      gfx.moveTo(x + 4, cy - 4); gfx.lineTo(cx + 3, cy + 6); gfx.lineTo(x + w - 4, cy + 2);
       gfx.stroke();
     }
 
     if (b.crackLevel >= 3) {
-      gfx.moveTo(x + 2, y + 4);
-      gfx.lineTo(cx - 4, cy + 3);
-      gfx.lineTo(x + 6, y + h - 2);
+      gfx.strokeColor = crackGlow;
+      gfx.lineWidth = 1.4;
+      gfx.moveTo(x + 2, y + 4); gfx.lineTo(cx - 4, cy + 3); gfx.lineTo(x + 6, y + h - 2);
       gfx.stroke();
-      gfx.moveTo(x + w - 5, y + 5);
-      gfx.lineTo(cx + 2, cy - 3);
+      gfx.moveTo(x + w - 5, y + 5); gfx.lineTo(cx + 2, cy - 3);
       gfx.stroke();
     }
   }
 
-  // HP bar (3px at bottom of brick)
+  // 6. Modern Sleek HP Bar (底部竹墨生命槽)
   const hpRatio = Math.max(0, b.hp / b.maxHp);
-  gfx.fillColor = new Color(0, 0, 0, 120);
+  gfx.fillColor = new Color(10, 15, 22, 160);
   gfx.rect(x, y + h - 3, w, 3);
   gfx.fill();
-  const barColor = hpRatio > 0.5 ? new Color(46, 213, 115, 200) :
-                   hpRatio > 0.25 ? new Color(255, 165, 2, 200) :
-                   new Color(255, 50, 50, 200);
+
+  const barColor = hpRatio > 0.5 ? new Color(46, 213, 115, 220) :
+                   hpRatio > 0.25 ? new Color(255, 165, 2, 220) :
+                   new Color(255, 56, 56, 220);
   gfx.fillColor = barColor;
   gfx.rect(x, y + h - 3, w * hpRatio, 3);
   gfx.fill();

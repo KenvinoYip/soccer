@@ -485,6 +485,7 @@ export class GameManager extends Component {
         if (b.hp <= 0) {
           if (b.type === 'tnt') tntQueue.push({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
           particlePool.spawnDebris(b.x + b.w / 2, b.y + b.h / 2, 7, b.color, b.w * 0.7, b.h * 0.7);
+          particlePool.spawnInkSplatter(b.x + b.w / 2, b.y + b.h / 2, 8);
           this.bricks.splice(i, 1);
         }
       }
@@ -622,8 +623,11 @@ export class GameManager extends Component {
 
         if (b.hp <= 0) {
           if (b.type === 'tnt') tntQueue.push({ x: cx, y: cy });
-          particlePool.spawnDebris(cx, cy, 5, b.color, b.w * 0.6, b.h * 0.6);
+          particlePool.spawnDebris(cx, cy, 6, b.color, b.w * 0.6, b.h * 0.6);
+          particlePool.spawnInkSplatter(cx, cy, 10);
           this.bricks.splice(i, 1);
+        } else {
+          particlePool.spawnInkSplatter(cx, cy, 4);
         }
       }
     }

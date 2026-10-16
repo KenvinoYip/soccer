@@ -23,145 +23,195 @@ function drawPolygon(
  * Draw a soccer ball with trail, fire/electric effects, and pentagon patches.
  */
 export function drawBall(gfx: Graphics, ball: BallData): void {
-    // ─── 1. Trail ────────────────────────────────────────────────────────────
-    for (let i = 0; i < ball.trail.length; i++) {
-        const t = ball.trail[i];
-        const ratio = i / ball.trail.length;
-        const trailR = ball.r * (0.25 + ratio * 0.55);
-        const alpha = Math.floor(t.alpha * 120);
-        if (alpha <= 0) continue;
+    // ─── 1. Calligraphic Ink Wash Brush Trail (新国风书法飞白水墨拖尾) ─────────
+    if (ball.trail && ball.trail.length > 1) {
+        for (let i = 0; i < ball.trail.length; i++) {
+            const t = ball.trail[i];
+            const ratio = i / ball.trail.length; // 0=oldest, 1=newest
+            const trailR = ball.r * (0.28 + ratio * 0.58);
+            const alpha = Math.floor(t.alpha * 160);
+            if (alpha <= 0) continue;
 
-        if (ball.isSuper) {
-            gfx.fillColor = new Color(255, 120, 0, alpha);
-        } else if (ball.mode === 1) {
-            gfx.fillColor = new Color(80, 120, 255, alpha);
-        } else {
-            gfx.fillColor = new Color(255, 255, 255, alpha);
-        }
-        gfx.circle(t.x, t.y, trailR);
-        gfx.fill();
-    }
-
-    // ─── 2. Fire effect for super ball ───────────────────────────────────────
-    if (ball.isSuper) {
-        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-        if (speed > 0.1) {
-            const baseAngle = Math.atan2(-ball.vy, -ball.vx); // opposite to movement
-            for (let j = 0; j < 8; j++) {
-                const spread = (j / 7) * 0.8 - 0.4;
-                const fireAngle = baseAngle + spread;
-                const fireLen = 8 + Math.random() * 12;
-                const fx = ball.x + Math.cos(fireAngle) * (ball.r + fireLen);
-                const fy = ball.y + Math.sin(fireAngle) * (ball.r + fireLen);
-                const fireAlpha = 180 - j * 15;
-                const innerFire = j < 3;
-                const midFire = j < 5;
-                if (innerFire) {
-                    gfx.fillColor = new Color(255, 255, 180, fireAlpha);
-                } else if (midFire) {
-                    gfx.fillColor = new Color(255, 120, 0, fireAlpha);
-                } else {
-                    gfx.fillColor = new Color(180, 40, 0, fireAlpha);
-                }
-                gfx.circle(fx, fy, 3 + (7 - j) * 0.8);
+            if (ball.isSuper) {
+                // Flaming Dragon Trail: Fiery vermilion & gold
+                gfx.fillColor = new Color(255, 110, 0, Math.floor(alpha * 0.75));
+                gfx.circle(t.x, t.y, trailR * 1.25);
                 gfx.fill();
+                gfx.fillColor = new Color(255, 220, 50, alpha);
+                gfx.circle(t.x, t.y, trailR * 0.7);
+                gfx.fill();
+            } else if (ball.mode === 1) {
+                // Electric Cyan Phantom Trail
+                gfx.fillColor = new Color(0, 180, 255, Math.floor(alpha * 0.65));
+                gfx.circle(t.x, t.y, trailR * 1.15);
+                gfx.fill();
+                gfx.fillColor = new Color(200, 240, 255, alpha);
+                gfx.circle(t.x, t.y, trailR * 0.65);
+                gfx.fill();
+            } else {
+                // Signature Calligraphic Deep Ink Wash Trail (浓墨点染 + 墨晕)
+                gfx.fillColor = new Color(15, 22, 32, Math.floor(alpha * 0.55));
+                gfx.circle(t.x, t.y, trailR * 1.1);
+                gfx.fill();
+                gfx.fillColor = new Color(240, 245, 250, Math.floor(alpha * 0.85));
+                gfx.circle(t.x, t.y, trailR * 0.6);
+                gfx.fill();
+
+                // Calligraphic flying ink droplets (飞白微滴)
+                if (i % 3 === 0 && i < ball.trail.length - 2) {
+                    const dropOffset = (i % 2 === 0 ? 1 : -1) * (trailR * 0.85);
+                    gfx.fillColor = new Color(15, 20, 28, Math.floor(alpha * 0.7));
+                    gfx.circle(t.x + dropOffset, t.y + (Math.random() - 0.5) * 4, 1.8);
+                    gfx.fill();
+                }
             }
         }
     }
 
-    // ─── 3. Glow rings for super ball ────────────────────────────────────────
+    // ─── 2. Blazing Dragon Flame Aura for Super Ball (大力金刚烈焰龙息) ─────
     if (ball.isSuper) {
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        if (speed > 0.1) {
+            const baseAngle = Math.atan2(-ball.vy, -ball.vx);
+            for (let j = 0; j < 8; j++) {
+                const spread = (j / 7) * 0.9 - 0.45;
+                const fireAngle = baseAngle + spread;
+                const fireLen = 10 + Math.random() * 14;
+                const fx = ball.x + Math.cos(fireAngle) * (ball.r + fireLen);
+                const fy = ball.y + Math.sin(fireAngle) * (ball.r + fireLen);
+                const fireAlpha = 200 - j * 18;
+
+                if (j < 3) {
+                    gfx.fillColor = new Color(255, 255, 200, fireAlpha);
+                } else if (j < 5) {
+                    gfx.fillColor = new Color(255, 140, 0, fireAlpha);
+                } else {
+                    gfx.fillColor = new Color(220, 30, 20, fireAlpha);
+                }
+                gfx.circle(fx, fy, 3.5 + (7 - j) * 0.7);
+                gfx.fill();
+            }
+        }
+
+        // Concentric Holy Qi rings
         const glowRings = [
-            { r: ball.r + 14, a: 20 },
-            { r: ball.r + 8,  a: 40 },
-            { r: ball.r + 3,  a: 70 },
+            { r: ball.r + 15, a: 25, c: new Color(255, 60, 20) },
+            { r: ball.r + 9,  a: 50, c: new Color(255, 160, 0) },
+            { r: ball.r + 4,  a: 85, c: new Color(255, 230, 50) },
         ];
         for (const ring of glowRings) {
-            gfx.fillColor = new Color(255, 160, 0, ring.a);
+            gfx.fillColor = new Color(ring.c.r, ring.c.g, ring.c.b, ring.a);
             gfx.circle(ball.x, ball.y, ring.r);
             gfx.fill();
         }
     }
 
-    // ─── 4. Clone mode (mode 1) glow ─────────────────────────────────────────
+    // ─── 3. Clone Mode (mode 1) Electric Lightning Aura ─────────────────────
     if (ball.mode === 1 && !ball.isSuper) {
-        gfx.fillColor = new Color(100, 160, 255, 35);
+        gfx.fillColor = new Color(0, 180, 255, 45);
         gfx.circle(ball.x, ball.y, ball.r + 8);
         gfx.fill();
-        gfx.fillColor = new Color(100, 160, 255, 55);
+        gfx.fillColor = new Color(150, 230, 255, 75);
         gfx.circle(ball.x, ball.y, ball.r + 4);
         gfx.fill();
     }
 
-    // ─── 5. Drop shadow ──────────────────────────────────────────────────────
-    gfx.fillColor = new Color(0, 0, 0, 50);
-    gfx.circle(ball.x + 3, ball.y - 3, ball.r);
+    // ─── 4. Drop Shadow ─────────────────────────────────────────────────────
+    gfx.fillColor = new Color(5, 8, 14, 70);
+    gfx.circle(ball.x + 2.5, ball.y - 2.5, ball.r);
     gfx.fill();
 
-    // ─── 6. Base ball circle ─────────────────────────────────────────────────
+    // ─── 5. Core Soccer Ball Sphere (Classic 3D Leather Shading) ─────────────
     if (ball.isSuper) {
-        gfx.fillColor = new Color(255, 240, 160, 255);
+        gfx.fillColor = new Color(255, 245, 190, 255);
     } else if (ball.mode === 1) {
-        gfx.fillColor = new Color(220, 235, 255, 255);
+        gfx.fillColor = new Color(230, 245, 255, 255);
     } else {
-        gfx.fillColor = new Color(248, 248, 248, 255);
+        gfx.fillColor = new Color(250, 250, 252, 255);
     }
     gfx.circle(ball.x, ball.y, ball.r);
     gfx.fill();
 
-    // ─── 7. Soccer pentagon patches (5 patches) ──────────────────────────────
-    // Relative positions scaled by ball radius, rotated by ball.rot
-    const patchOffsets = [
-        { px: 0,     py: -0.6 },
-        { px: 0.55,  py: 0.3  },
-        { px: -0.55, py: 0.3  },
-        { px: 0.35,  py: -0.45 },
-        { px: -0.35, py: -0.45 },
-    ];
-    const patchColor = ball.isSuper
-        ? new Color(180, 100, 0, 180)
-        : new Color(30, 30, 30, 200);
-    gfx.fillColor = patchColor;
+    // Subtle 3D bottom shading
+    gfx.fillColor = new Color(148, 163, 184, 85);
+    gfx.circle(ball.x + 1.5, ball.y - 1.5, ball.r * 0.95);
+    gfx.fill();
 
+    // Re-fill top-left highlight core for spherical depth
+    gfx.fillColor = ball.isSuper ? new Color(255, 250, 210, 220) : new Color(255, 255, 255, 220);
+    gfx.circle(ball.x - ball.r * 0.25, ball.y + ball.r * 0.25, ball.r * 0.75);
+    gfx.fill();
+
+    // ─── 6. Golden Energy Seams & Leather Stitching (太极金光缝线) ───────────
     const cos = Math.cos(ball.rot);
     const sin = Math.sin(ball.rot);
+    const patchOffsets = [
+        { px: 0,     py: -0.62 },
+        { px: 0.58,  py: 0.28  },
+        { px: -0.58, py: 0.28  },
+        { px: 0.36,  py: -0.48 },
+        { px: -0.36, py: -0.48 },
+    ];
+
+    // Seam lines connecting patches
+    gfx.strokeColor = ball.isSuper
+        ? new Color(255, 220, 50, 200)
+        : new Color(212, 160, 23, 150);
+    gfx.lineWidth = 1.0;
+    for (const offset of patchOffsets) {
+        const ox = offset.px * ball.r * 0.65;
+        const oy = offset.py * ball.r * 0.65;
+        const rx = ox * cos - oy * sin;
+        const ry = ox * sin + oy * cos;
+        gfx.moveTo(ball.x, ball.y);
+        gfx.lineTo(ball.x + rx, ball.y + ry);
+    }
+    gfx.stroke();
+
+    // ─── 7. Classic Soccer Ball Pentagon Patches (黑白五边形皮面) ────────────
+    const patchColor = ball.isSuper
+        ? new Color(160, 60, 0, 220)
+        : new Color(22, 28, 38, 235);
+    gfx.fillColor = patchColor;
 
     for (const offset of patchOffsets) {
-        // Apply 2D rotation matrix to offset
         const ox = offset.px * ball.r * 0.65;
         const oy = offset.py * ball.r * 0.65;
         const rx = ox * cos - oy * sin;
         const ry = ox * sin + oy * cos;
         const pcx = ball.x + rx;
         const pcy = ball.y + ry;
-        const patchR = ball.r * 0.22;
+        const patchR = ball.r * 0.24;
 
         drawPolygon(gfx, pcx, pcy, patchR, 5, ball.rot);
         gfx.fill();
     }
 
-    // ─── 8. Highlight glint ───────────────────────────────────────────────────
-    gfx.fillColor = new Color(255, 255, 255, ball.isSuper ? 100 : 160);
+    // Center pentagon patch
+    drawPolygon(gfx, ball.x, ball.y, ball.r * 0.25, 5, ball.rot);
+    gfx.fill();
+
+    // ─── 8. Specular Highlight Glint ────────────────────────────────────────
+    gfx.fillColor = new Color(255, 255, 255, ball.isSuper ? 140 : 190);
     gfx.circle(
-        ball.x - ball.r * 0.35,
-        ball.y + ball.r * 0.35,
-        ball.r * 0.2
+        ball.x - ball.r * 0.32,
+        ball.y + ball.r * 0.32,
+        ball.r * 0.22
     );
     gfx.fill();
 
-    // ─── 9. Electric arcs for clone mode (mode 1) ────────────────────────────
+    // ─── 9. Electric Arcs for Clone Mode (mode 1) ───────────────────────────
     if (ball.mode === 1) {
-        gfx.strokeColor = new Color(100, 150, 255, 200);
-        gfx.lineWidth = 1.5;
+        gfx.strokeColor = new Color(100, 200, 255, 220);
+        gfx.lineWidth = 1.8;
         for (let k = 0; k < 3; k++) {
             const angle = ball.rot + k * ((Math.PI * 2) / 3);
             const x1 = ball.x + Math.cos(angle) * (ball.r + 2);
             const y1 = ball.y + Math.sin(angle) * (ball.r + 2);
-            const x2 = ball.x + Math.cos(angle) * (ball.r + 9);
-            const y2 = ball.y + Math.sin(angle) * (ball.r + 9);
-            // Jagged lightning
-            const mx = (x1 + x2) / 2 + (Math.random() - 0.5) * 4;
-            const my = (y1 + y2) / 2 + (Math.random() - 0.5) * 4;
+            const x2 = ball.x + Math.cos(angle) * (ball.r + 10);
+            const y2 = ball.y + Math.sin(angle) * (ball.r + 10);
+            const mx = (x1 + x2) / 2 + (Math.random() - 0.5) * 5;
+            const my = (y1 + y2) / 2 + (Math.random() - 0.5) * 5;
             gfx.moveTo(x1, y1);
             gfx.lineTo(mx, my);
             gfx.lineTo(x2, y2);

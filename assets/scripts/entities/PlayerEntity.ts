@@ -1,5 +1,5 @@
 import { Color, Graphics } from 'cc';
-import { HERO_SPRITE_DATA, HERO_KICK_SPRITE_DATA } from './HeroAsset';
+import { HERO_SPRITE_DATA, HERO_KICK_SPRITE_DATA, NINJA_KICK_SPRITE_DATA } from './HeroAsset';
 
 function hexToColor(hex: string, alpha: number = 255): Color {
     const clean = hex.replace('#', '');
@@ -86,13 +86,13 @@ export class PlayerEntity {
             this._transparentCanvas = this._keyOutWhite(imgIdle);
         }
 
-        // 2. Bruce Lee Flying Dragon Kick Action Sprite
+        // 2. Ninja Must Die Style Action Kick Sprite
         const imgKick = new Image();
         imgKick.onload = () => {
             this._heroKickImg = imgKick;
             this._transparentKickCanvas = this._keyOutWhite(imgKick);
         };
-        imgKick.src = HERO_KICK_SPRITE_DATA;
+        imgKick.src = NINJA_KICK_SPRITE_DATA || HERO_KICK_SPRITE_DATA;
         if (imgKick.complete && imgKick.naturalWidth > 0) {
             this._heroKickImg = imgKick;
             this._transparentKickCanvas = this._keyOutWhite(imgKick);
@@ -423,7 +423,7 @@ export class PlayerEntity {
 
             case 'side':
             default: {
-                // ── 经典李小龙凌空飞龙侧踢 ──
+                // ── 经典凌空飞龙侧踢 ──
                 const midAirY = this.kickFrame === 2 ? -44 * scale : -20 * scale;
                 const midAirX = this.kickFrame === 2 ? 16 * scale : 6 * scale;
                 ctx.translate(cx + midAirX, cy + midAirY);
@@ -436,6 +436,126 @@ export class PlayerEntity {
                 break;
             }
         }
+
+        // ── 踢击瞬间足尖暴射破空足球 (Soccer Ball Launch Blast) ──
+        if (progress < 0.75) {
+            let blastFootX = cx;
+            let blastFootY = cy;
+            let blastAngle = -0.55;
+
+            if (this.currentKickType === 'bicycle') {
+                const jumpY = -76 * Math.sin(Math.min(1, progress * 1.3) * Math.PI) * scale;
+                blastFootX = cx + 42 * scale;
+                blastFootY = cy + jumpY - 62 * scale;
+                blastAngle = -Math.PI * 0.45;
+            } else if (this.currentKickType === 'spin') {
+                const jumpY = -50 * Math.sin(progress * Math.PI) * scale;
+                blastFootX = cx + 38 * scale;
+                blastFootY = cy + jumpY - 32 * scale;
+                blastAngle = -0.65;
+            } else if (this.currentKickType === 'shadowless') {
+                blastFootX = cx + 36 * scale;
+                blastFootY = cy - 42 * scale;
+                blastAngle = -0.58;
+            } else {
+                blastFootX = cx + 45 * scale;
+                blastFootY = cy - 48 * scale;
+                blastAngle = -0.52;
+            }
+
+            this._drawKickBallBlast(ctx, blastFootX, blastFootY, scale, blastAngle, progress, this.isSuper);
+        }
+    }
+
+    private _drawKickBallBlast(
+        ctx: CanvasRenderingContext2D,
+        ballX: number,
+        ballY: number,
+        scale: number,
+        angle: number,
+        progress: number,
+        isSuper: boolean
+    ): void {
+        ctx.save();
+        ctx.translate(ballX, ballY);
+        ctx.rotate(angle);
+
+        const ballR = 14 * scale * (1 + (1 - progress) * 0.25);
+        const alpha = Math.max(0, Math.min(1, (0.75 - progress) / 0.5));
+
+        ctx.globalAlpha = alpha;
+
+        // 1. Concentric Ink Shockwave & Calligraphy Speed Slashes
+        ctx.strokeStyle = isSuper ? '#FFE600' : '#11161F';
+        ctx.lineWidth = 3.5 * scale;
+        ctx.shadowColor = isSuper ? '#FF8800' : '#FF3838';
+        ctx.shadowBlur = 12 * scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, ballR * 1.8, -0.8, 0.8);
+        ctx.stroke();
+
+        // 2. Ink Calligraphy Speed Slashes trailing behind the soccer ball
+        ctx.strokeStyle = isSuper ? '#FFA500' : '#222831';
+        ctx.lineWidth = 2.0 * scale;
+        ctx.beginPath();
+        ctx.moveTo(-ballR * 0.8, -ballR * 0.9);
+        ctx.lineTo(-ballR * 3.0, -ballR * 0.5);
+        ctx.moveTo(-ballR * 0.8, ballR * 0.9);
+        ctx.lineTo(-ballR * 3.0, ballR * 0.5);
+        ctx.moveTo(-ballR * 1.2, 0);
+        ctx.lineTo(-ballR * 3.8, 0);
+        ctx.stroke();
+
+        // 3. Soccer Ball Base Body
+        const grad = ctx.createRadialGradient(-ballR * 0.3, -ballR * 0.3, ballR * 0.1, 0, 0, ballR);
+        grad.addColorStop(0, '#FFFFFF');
+        grad.addColorStop(0.7, '#E2E8F0');
+        grad.addColorStop(1, '#94A3B8');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, ballR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4. Classic Black & Gold Pentagon Patches
+        ctx.fillStyle = isSuper ? '#8B4513' : '#1E293B';
+        ctx.strokeStyle = isSuper ? '#FFD700' : '#CBD5E1';
+        ctx.lineWidth = 1.0 * scale;
+
+        const rot = progress * 6.0;
+        for (let i = 0; i < 5; i++) {
+            const pAngle = rot + (i * Math.PI * 2) / 5;
+            const dist = ballR * 0.55;
+            const px = Math.cos(pAngle) * dist;
+            const py = Math.sin(pAngle) * dist;
+            const patchR = ballR * 0.28;
+
+            ctx.beginPath();
+            for (let j = 0; j < 5; j++) {
+                const a = pAngle + (j * Math.PI * 2) / 5;
+                const x = px + Math.cos(a) * patchR;
+                const y = py + Math.sin(a) * patchR;
+                if (j === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // Center patch
+        ctx.beginPath();
+        for (let j = 0; j < 5; j++) {
+            const a = rot + (j * Math.PI * 2) / 5;
+            const x = Math.cos(a) * (ballR * 0.32);
+            const y = Math.sin(a) * (ballR * 0.32);
+            if (j === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
     }
 
     private _drawFootFlameJet(ctx: CanvasRenderingContext2D, fx: number, fy: number, scale: number, isSuper: boolean): void {
@@ -468,46 +588,337 @@ export class PlayerEntity {
         ctx.restore();
     }
 
+    /**
+     * Neo-Ink Wash Shaolin Shadow Ninja Idle Stance (潮酷新国风少林暗影英雄)
+     * - Dark shadow shinobi body with martial readiness
+     * - Razor-sharp glowing amber/crimson visor eyes
+     * - Giant billowing crimson hero scarf with wind cloth physics
+     * - Saffron gold Shaolin martial belt & clean white leg wraps
+     * - Waiting 3D Yin-Yang soccer ball spinning at foot
+     */
     private _drawIdleSprite(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number = 1.0): void {
-        const spriteSource = this._transparentCanvas || this._heroImg;
-        if (!spriteSource) return;
+        const px = cx;
+        const crouchY = (this.isCharging ? 6 : 0) * scale;
+        const py = cy - 25 * scale + crouchY;
 
-        ctx.translate(cx, cy - 35 * scale);
+        ctx.save();
+        ctx.translate(px, py);
 
-        if (this.kickFrame === 1 || this.isCharging) {
-            // Charging: Coiled martial spring stance (蓄力后倾压低)
-            ctx.rotate(-0.12);
-            ctx.scale(0.94 * scale, 1.06 * scale);
-        } else if (this._isGesturing) {
-            // Bruce Lee signature nose wipe / chin flick (李小龙擦鼻仰头亮相)
-            const gestureProgress = (this._gestureTimer - 250) / 45; // 0..1
-            const chinTilt = Math.sin(gestureProgress * Math.PI) * 0.08;
-            ctx.rotate(chinTilt);
-            ctx.scale(scale * 1.02, scale * 1.02);
+        const anim = this._animTimer;
+        const hop = this.isCharging ? 0 : Math.sin(anim * 6.5) * 1.8 * scale;
+        const sway = this.isCharging ? (Math.random() - 0.5) * 1.5 * scale : Math.sin(anim * 3.2) * 1.2 * scale;
+        const scarfWave1 = Math.sin(anim * 4.8);
+        const scarfWave2 = Math.cos(anim * 4.8 + 1.2);
 
-            // Nose wipe sparkle
-            if (gestureProgress > 0.3 && gestureProgress < 0.7) {
-                ctx.save();
-                ctx.fillStyle = '#FFE600';
-                ctx.shadowColor = '#FFD700';
-                ctx.shadowBlur = 8 * scale;
-                ctx.beginPath();
-                ctx.arc(15 * scale, -45 * scale, 3 * scale, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+        // ── 1. The Waiting Soccer Ball at Foot (足边蓄势待发足球) ──
+        const ballX = 22 * scale;
+        const ballY = 24 * scale;
+        const ballR = 13 * scale;
+
+        // Ball ground contact shadow
+        ctx.save();
+        ctx.fillStyle = 'rgba(10, 15, 25, 0.45)';
+        ctx.beginPath();
+        ctx.ellipse(ballX, ballY + ballR * 0.9, ballR * 0.9, ballR * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Soccer ball sphere
+        ctx.save();
+        const ballGrad = ctx.createRadialGradient(
+            ballX - ballR * 0.35, ballY - ballR * 0.35, ballR * 0.1,
+            ballX, ballY, ballR
+        );
+        ballGrad.addColorStop(0, '#FFFFFF');
+        ballGrad.addColorStop(0.65, '#E2E8F0');
+        ballGrad.addColorStop(1, '#94A3B8');
+        ctx.fillStyle = ballGrad;
+        if (this.isCharging) {
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 15 * scale;
+        }
+        ctx.beginPath();
+        ctx.arc(ballX, ballY, ballR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Soccer ball pentagons (spinning when charging)
+        const ballSpin = this.isCharging ? anim * 4.5 : anim * 0.8;
+        ctx.fillStyle = this.isCharging ? '#A04000' : '#1E293B';
+        ctx.strokeStyle = this.isCharging ? '#FFD700' : '#CBD5E1';
+        ctx.lineWidth = 1.0 * scale;
+
+        // Center patch
+        ctx.beginPath();
+        for (let j = 0; j < 5; j++) {
+            const a = ballSpin + (j * Math.PI * 2) / 5;
+            const x = ballX + Math.cos(a) * (ballR * 0.32);
+            const y = ballY + Math.sin(a) * (ballR * 0.32);
+            if (j === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 5 Outer patches
+        for (let i = 0; i < 5; i++) {
+            const pAngle = ballSpin + (i * Math.PI * 2) / 5;
+            const dist = ballR * 0.62;
+            const pxPos = ballX + Math.cos(pAngle) * dist;
+            const pyPos = ballY + Math.sin(pAngle) * dist;
+            const patchR = ballR * 0.28;
+
+            ctx.beginPath();
+            for (let j = 0; j < 5; j++) {
+                const a = pAngle + (j * Math.PI * 2) / 5;
+                const x = pxPos + Math.cos(a) * patchR;
+                const y = pyPos + Math.sin(a) * patchR;
+                if (j === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
-        } else {
-            // Rhythmic weight sway & loose agile shoulders + kinetic dash tilt
-            const dashTilt = Math.max(-0.16, Math.min(0.16, this.vx * 0.025));
-            const swayTilt = Math.sin(this._animTimer * 3.2) * 0.032 + dashTilt;
-            const stretchY = 1.0 + Math.sin(this._animTimer * 6.5) * 0.02;
-            ctx.rotate(swayTilt);
-            ctx.scale(scale, scale * stretchY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
         }
 
-        const spriteW = 135;
-        const spriteH = 175;
-        ctx.drawImage(spriteSource, -spriteW / 2, -spriteH / 2, spriteW, spriteH);
+        // Charging golden dragon Qi around ball
+        if (this.isCharging) {
+            ctx.strokeStyle = '#FFE600';
+            ctx.lineWidth = 2.0 * scale;
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, ballR + 4 * scale, anim * 3, anim * 3 + Math.PI * 1.2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#FF6B35';
+            ctx.lineWidth = 1.5 * scale;
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, ballR + 7 * scale, -anim * 3.5, -anim * 3.5 + Math.PI);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // ── 2. Ultra-Long Crimson Hero Scarf (超长飘逸赤红大围巾) ──
+        const neckX = -4 * scale + sway;
+        const neckY = -36 * scale + hop;
+
+        ctx.save();
+        ctx.shadowColor = '#C0392B';
+        ctx.shadowBlur = 8 * scale;
+
+        // Scarf Layer 1: Dark Crimson Deep Shadow Silk
+        ctx.fillStyle = '#781515';
+        ctx.beginPath();
+        ctx.moveTo(neckX, neckY);
+        ctx.bezierCurveTo(
+            neckX - 28 * scale, neckY - 14 * scale + scarfWave1 * 5,
+            neckX - 58 * scale, neckY - 34 * scale + scarfWave2 * 8,
+            neckX - 92 * scale, neckY - 58 * scale + scarfWave1 * 12
+        );
+        ctx.lineTo(neckX - 86 * scale, neckY - 68 * scale + scarfWave1 * 12);
+        ctx.bezierCurveTo(
+            neckX - 52 * scale, neckY - 44 * scale + scarfWave2 * 8,
+            neckX - 24 * scale, neckY - 24 * scale + scarfWave1 * 5,
+            neckX, neckY - 6 * scale
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        // Scarf Layer 2: Main Billowing Blood Red Ribbon
+        ctx.fillStyle = '#C0392B';
+        ctx.beginPath();
+        ctx.moveTo(neckX + 2 * scale, neckY);
+        ctx.bezierCurveTo(
+            neckX - 25 * scale, neckY - 18 * scale + scarfWave1 * 6,
+            neckX - 54 * scale, neckY - 40 * scale + scarfWave2 * 10,
+            neckX - 88 * scale, neckY - 64 * scale + scarfWave1 * 14
+        );
+        // Forked swallowtail tip
+        ctx.lineTo(neckX - 102 * scale, neckY - 72 * scale + scarfWave1 * 16);
+        ctx.lineTo(neckX - 86 * scale, neckY - 60 * scale + scarfWave1 * 14);
+        ctx.lineTo(neckX - 96 * scale, neckY - 52 * scale + scarfWave1 * 14);
+        ctx.bezierCurveTo(
+            neckX - 50 * scale, neckY - 32 * scale + scarfWave2 * 9,
+            neckX - 22 * scale, neckY - 12 * scale + scarfWave1 * 5,
+            neckX, neckY - 2 * scale
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        // Scarf Layer 3: Vibrant Vermilion Wind Crest Highlight
+        ctx.fillStyle = '#E74C3C';
+        ctx.beginPath();
+        ctx.moveTo(neckX + 1 * scale, neckY - 2 * scale);
+        ctx.bezierCurveTo(
+            neckX - 24 * scale, neckY - 20 * scale + scarfWave1 * 6,
+            neckX - 52 * scale, neckY - 42 * scale + scarfWave2 * 10,
+            neckX - 85 * scale, neckY - 66 * scale + scarfWave1 * 14
+        );
+        ctx.lineTo(neckX - 82 * scale, neckY - 62 * scale + scarfWave1 * 14);
+        ctx.bezierCurveTo(
+            neckX - 50 * scale, neckY - 38 * scale + scarfWave2 * 9,
+            neckX - 22 * scale, neckY - 16 * scale + scarfWave1 * 5,
+            neckX - 1 * scale, neckY - 1 * scale
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        // Trailing fire embers floating off the scarf
+        for (let k = 0; k < 4; k++) {
+            const emberProgress = ((anim * 35 + k * 25) % 90);
+            const ex = neckX - 70 * scale - emberProgress * 0.45 * scale;
+            const ey = neckY - 45 * scale - emberProgress * 0.35 * scale + Math.sin(anim * 6 + k) * 6 * scale;
+            const emberAlpha = Math.max(0, 1 - emberProgress / 90);
+            ctx.fillStyle = `rgba(255, 71, 87, ${emberAlpha})`;
+            ctx.beginPath();
+            ctx.arc(ex, ey, (1.8 - k * 0.3) * scale, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // ── 3. Shadow Ninja Body & Martial Stance (暗影国风武者身躯) ──
+        ctx.save();
+        ctx.translate(sway, hop);
+
+        // Back leg (Right leg, braced back)
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-6 * scale, 6 * scale);
+        ctx.lineTo(-20 * scale, 18 * scale);
+        ctx.lineTo(-26 * scale, 34 * scale);
+        ctx.lineTo(-14 * scale, 34 * scale);
+        ctx.lineTo(-12 * scale, 22 * scale);
+        ctx.lineTo(0, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Front leg (Left leg, leading toward the soccer ball)
+        ctx.fillStyle = '#18202D';
+        ctx.beginPath();
+        ctx.moveTo(2 * scale, 6 * scale);
+        ctx.lineTo(14 * scale, 16 * scale);
+        ctx.lineTo(18 * scale, 32 * scale);
+        ctx.lineTo(26 * scale, 32 * scale);
+        ctx.lineTo(22 * scale, 20 * scale);
+        ctx.lineTo(8 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // White Shaolin leg wraps with dark cross ties (白绑腿)
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
+        ctx.fillRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 1.0 * scale;
+        ctx.strokeRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
+        ctx.strokeRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
+
+        // Ninja Combat Sneakers (Dark cleats with gold accent)
+        ctx.fillStyle = '#0B0F15';
+        ctx.beginPath();
+        ctx.roundRect(-27 * scale, 32 * scale, 15 * scale, 5 * scale, 2 * scale);
+        ctx.roundRect(14 * scale, 30 * scale, 16 * scale, 5 * scale, 2 * scale);
+        ctx.fill();
+
+        // Torso: Muscular athletic shadow silhouette
+        ctx.fillStyle = '#151D2A';
+        ctx.beginPath();
+        ctx.moveTo(-16 * scale, -24 * scale);
+        ctx.lineTo(14 * scale, -24 * scale);
+        ctx.lineTo(10 * scale, 6 * scale);
+        ctx.lineTo(-12 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Chest vest contour & armor bevel
+        ctx.fillStyle = '#222C3D';
+        ctx.beginPath();
+        ctx.moveTo(-12 * scale, -22 * scale);
+        ctx.lineTo(10 * scale, -22 * scale);
+        ctx.lineTo(6 * scale, -4 * scale);
+        ctx.lineTo(-8 * scale, -4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shaolin Golden Martial Belt & Dangling Ribbons (金刚武僧腰带)
+        ctx.fillStyle = '#E67E22';
+        ctx.fillRect(-13 * scale, 3 * scale, 25 * scale, 5 * scale);
+        ctx.fillStyle = '#F39C12';
+        ctx.fillRect(-13 * scale, 4 * scale, 25 * scale, 2 * scale);
+        // Belt knot & ribbons
+        ctx.beginPath();
+        ctx.arc(-2 * scale, 5 * scale, 3.5 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#D35400';
+        ctx.beginPath();
+        ctx.moveTo(-4 * scale, 6 * scale);
+        ctx.lineTo(-8 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
+        ctx.lineTo(-4 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
+        ctx.lineTo(-1 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Arms in Kung Fu Ready Guard Stance
+        // Rear arm (guarding chest)
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-14 * scale, -22 * scale);
+        ctx.lineTo(-24 * scale, -8 * scale);
+        ctx.lineTo(-18 * scale, 2 * scale);
+        ctx.lineTo(-12 * scale, -6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Front arm (extended forward in martial poise)
+        ctx.fillStyle = '#1B2332';
+        ctx.beginPath();
+        ctx.moveTo(12 * scale, -22 * scale);
+        ctx.lineTo(24 * scale, -12 * scale);
+        ctx.lineTo(30 * scale, -4 * scale);
+        ctx.lineTo(24 * scale, 2 * scale);
+        ctx.lineTo(14 * scale, -12 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Head: Sleek Shadow Ninja Cowl
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(-1 * scale, -34 * scale, 13 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Angular cowl jawline
+        ctx.beginPath();
+        ctx.moveTo(-12 * scale, -32 * scale);
+        ctx.lineTo(2 * scale, -20 * scale);
+        ctx.lineTo(11 * scale, -32 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Glowing Razor-Sharp Eye Visor Flare (小黑/苍牙式炽亮战眼神眸)
+        const eyeGlowColor = this.isSuper ? '#FF3838' : '#FFD700';
+        const eyeCoreColor = '#FFFFFF';
+        ctx.shadowColor = eyeGlowColor;
+        ctx.shadowBlur = (this.isCharging ? 16 : 10) * scale;
+
+        // Eye slit
+        ctx.fillStyle = eyeCoreColor;
+        ctx.beginPath();
+        ctx.moveTo(1 * scale, -34 * scale);
+        ctx.lineTo(9 * scale, -32 * scale);
+        ctx.lineTo(7 * scale, -30 * scale);
+        ctx.lineTo(0, -32 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Horizontal luminous eye flare streak
+        ctx.strokeStyle = eyeGlowColor;
+        ctx.lineWidth = 1.8 * scale;
+        ctx.beginPath();
+        ctx.moveTo(-3 * scale, -33 * scale);
+        ctx.lineTo(16 * scale, -31 * scale);
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.restore();
     }
 
     private _drawShadow(gfx: Graphics, px: number, py: number, hopY: number = 0): void {
