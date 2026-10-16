@@ -6,7 +6,7 @@ import { CONFIG } from '../Config';
 
 export class KeeperEntity {
   x: number = 0;
-  y: number = -50;
+  y: number = CONFIG.LAYOUT.KEEPER_Y;
   vx: number = 2.2;
   r: number = 22;
   shieldAngle: number = 0;
@@ -23,7 +23,7 @@ export class KeeperEntity {
 
   reset(stage: number) {
     this.x           = 0;
-    this.y           = -50;
+    this.y           = CONFIG.LAYOUT.KEEPER_Y;
     this.baseSpeed   = 2 + stage * 0.3;
     this.vx          = this.baseSpeed * (Math.random() < 0.5 ? 1 : -1);
     this.hasShield   = stage >= 2;

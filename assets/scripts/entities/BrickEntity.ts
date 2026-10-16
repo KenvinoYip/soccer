@@ -27,12 +27,12 @@ export function createBrickGrid(stage: number, _W: number): BrickData[] {
   const rows     = Math.min(8, 5 + Math.floor((stage - 1) / 2));
   const cols     = 7;
   const wallW    = 380;
-  const wallH    = Math.min(200, 140 + rows * 8);
+  const wallH    = Math.min(160, 115 + rows * 7); // 高度适中整洁：150-160px
   const bw       = wallW / cols;
   const bh       = wallH / rows;
   const startX   = -wallW / 2;
-  const wallTop  = CONFIG.WALL_TOP;  // 170 in Cocos Y-up
-  const startY   = wallTop - wallH;  // top of brick grid (lower Y value)
+  const wallTop  = CONFIG.WALL_TOP;  // 290 in Cocos Y-up
+  const startY   = wallTop - wallH;  // 砖墙底部约 130 左右，大幅拉开与人物的垂直缓冲距离
 
   const tntRate   = Math.min(0.22, 0.06 + stage * 0.025);
   const metalRate = Math.min(0.30, 0.08 + stage * 0.030);
@@ -84,15 +84,11 @@ export function updateBrickCracks(b: BrickData): void {
 }
 
 // ── 砖块掉落重排 ─────────────────────────────────────────────
-export function applyWallGravity(bricks: BrickData[], wallTop: number, _wallBottom: number): void {
-  const wallH = Math.min(200, 140 + 5 * 8); // conservative height
-  const rows  = Math.min(8, 5);
-  const bh    = wallH / rows;
-
+export function applyWallGravity(bricks: BrickData[], _wallTop: number, wallBottom: number): void {
   for (let c = 0; c < 7; c++) {
     const col = bricks.filter(b => b.col === c).sort((a, b) => a.y - b.y);
     col.forEach((b, idx) => {
-      const targetY = wallTop - wallH + idx * (b.h + 2);
+      const targetY = wallBottom + idx * (b.h + 2);
       if (Math.abs(b.y - targetY) > 0.5) {
         b.targetY = targetY;
         b.vy = 0;

@@ -408,7 +408,7 @@ export class GameManager extends Component {
         } else {
           // 向上高扬角散布
           targetX = (i - count / 2) * 18;
-          targetY = 120;
+          targetY = 220;
         }
 
         // 精准弹道动力学解算：dx = vx * t, dy = vy * t - 0.5 * g * t^2
@@ -445,14 +445,14 @@ export class GameManager extends Component {
       this.flashAlpha = 0.85;
 
       // 佛掌从天而降轰击全墙：左中右三重神圣金色震波与全屏金色爆轰
-      shockWavePool.spawn(0, CONFIG.WALL_BOTTOM + 60, true);
-      shockWavePool.spawn(-110, CONFIG.WALL_BOTTOM + 40, true);
-      shockWavePool.spawn(110, CONFIG.WALL_BOTTOM + 40, true);
-      shockWavePool.spawnTNT(0, CONFIG.WALL_BOTTOM + 40);
-      particlePool.spawnGoldExplosion(0, CONFIG.WALL_BOTTOM + 50, 50);
-      particlePool.spawnGoldExplosion(-100, CONFIG.WALL_BOTTOM + 50, 25);
-      particlePool.spawnGoldExplosion(100, CONFIG.WALL_BOTTOM + 50, 25);
-      floatTextPool.spawn(0, -60, '✋ 如来神掌·万佛朝宗!!', '#FFD700', 32, -1.8);
+      shockWavePool.spawn(0, CONFIG.WALL_BOTTOM + 50, true);
+      shockWavePool.spawn(-110, CONFIG.WALL_BOTTOM + 30, true);
+      shockWavePool.spawn(110, CONFIG.WALL_BOTTOM + 30, true);
+      shockWavePool.spawnTNT(0, CONFIG.WALL_BOTTOM + 30);
+      particlePool.spawnGoldExplosion(0, CONFIG.WALL_BOTTOM + 40, 50);
+      particlePool.spawnGoldExplosion(-100, CONFIG.WALL_BOTTOM + 40, 25);
+      particlePool.spawnGoldExplosion(100, CONFIG.WALL_BOTTOM + 40, 25);
+      floatTextPool.spawn(0, CONFIG.WALL_BOTTOM - 45, '✋ 如来神掌·万佛朝宗!!', '#FFD700', 32, -1.8);
 
       // 直接震飞扑倒守门员
       this.keeper.knockback();
@@ -463,7 +463,7 @@ export class GameManager extends Component {
 
       for (let i = this.bricks.length - 1; i >= 0; i--) {
         const b = this.bricks[i];
-        if (b.y <= CONFIG.WALL_BOTTOM + 115) {
+        if (b.y <= CONFIG.WALL_BOTTOM + 85) {
           // 下半层直接粉碎
           b.hp -= 420;
           b.hitFlash = 14;
@@ -1026,7 +1026,7 @@ export class GameManager extends Component {
         startX, startY,
         (dx / len) * speed,
         (dy / len) * speed,
-        CONFIG.GRAVITY, 28
+        CONFIG.GRAVITY, 36
       );
       drawAimLine(gfx, trajectory, isSuper);
     }

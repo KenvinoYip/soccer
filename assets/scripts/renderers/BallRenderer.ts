@@ -1,5 +1,5 @@
 import { Color, Graphics } from 'cc';
-import { BallData } from '../Config';
+import { BallData, CONFIG } from '../Config';
 
 // ─── Helper: draw a regular polygon (pentagon patch) ───────────────────────
 function drawPolygon(
@@ -187,7 +187,7 @@ export function drawAimLine(
         const zoneW = 380;
         const zoneH = 110;
         const zoneX = -zoneW / 2;
-        const zoneY = -30; // CONFIG.WALL_BOTTOM
+        const zoneY = CONFIG.WALL_BOTTOM;
 
         // Golden translucent demolition zone fill
         gfx.fillColor = new Color(255, 215, 0, 45);

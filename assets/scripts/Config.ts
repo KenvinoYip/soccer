@@ -104,8 +104,8 @@ export interface ModeConfig {
 
 export const GAME_CONFIG = {
     GROUND_Y: -240,
-    WALL_TOP: 170,
-    WALL_BOTTOM: -30,
+    WALL_TOP: 290,
+    WALL_BOTTOM: 130,
     WALL_WIDTH: 380,
     BRICK_COLS: 7,
     COLORS: {
@@ -125,10 +125,10 @@ export const CONFIG = {
     H: 780,
     GROUND_Y: -240,
     PLAYER_X: 0,
-    WALL_TOP: 170,
-    WALL_BOTTOM: -30,
+    WALL_TOP: 290,
+    WALL_BOTTOM: 130,
     BALL_MAX_SPEED: 28,
-    GRAVITY: 0.45,
+    GRAVITY: 0.38,
 
     CANVAS: {
         W: 440,
@@ -139,11 +139,11 @@ export const CONFIG = {
 
     LAYOUT: {
         GROUND_Y: -240,
-        WALL_BOTTOM: -30,
-        WALL_TOP: 170,
+        WALL_BOTTOM: 130,
+        WALL_TOP: 290,
         PLAYER_X: 0,
         PLAYER_Y: -240,
-        KEEPER_Y: -50,
+        KEEPER_Y: 85,
         KEEPER_PATROL_MIN_X: -135,
         KEEPER_PATROL_MAX_X: 135,
         KEEPER_RADIUS: 24,
@@ -154,7 +154,7 @@ export const CONFIG = {
     },
 
     PHYSICS: {
-        GRAVITY: 0.45,
+        GRAVITY: 0.38,
         BALL_MAX_SPEED: 28,
         BALL_MIN_SPEED: 7,
         WALL_ELASTICITY: 0.94,
