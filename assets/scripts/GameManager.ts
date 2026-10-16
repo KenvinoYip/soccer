@@ -513,10 +513,9 @@ export class GameManager extends Component {
 
     const isSuper = zone === 'RED';
     const dmgMultiplier = isSuper ? 2.8 : zone === 'YELLOW' ? 1.5 : 1.0;
-    const speedMultiplier = isSuper ? 1.4 : zone === 'YELLOW' ? 1.15 : 1.0;
-
-    // 起手第一脚速度平缓（70%），给玩家充分反应时间就位准备接球
-    const firstShotSpeedRatio = 0.70;
+    // 起手发球速度平缓舒适（52%），给玩家充分反应时间就位准备接球
+    const firstShotSpeedRatio = 0.52;
+    const speedMultiplier = isSuper ? 1.20 : zone === 'YELLOW' ? 1.10 : 1.0;
     const baseDmg   = Math.round(100 * modeCfg.dmgMultiplier * dmgMultiplier);
     const baseSpeed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * speedMultiplier * firstShotSpeedRatio;
 
@@ -566,7 +565,7 @@ export class GameManager extends Component {
     } else {
       shockWavePool.spawn(startX, startY, false);
       particlePool.spawnSpark(startX, startY, 6, '#ff8c00');
-      floatTextPool.spawn(startX, startY + 25, '🥋 WATA~! (起手70%球速)', '#FFE600', 16, -1.8);
+      floatTextPool.spawn(startX, startY + 25, '🥋 WATA~! (起手舒缓慢速)', '#FFE600', 16, -1.8);
     }
 
     this.player.kick(isSuper);
@@ -902,12 +901,12 @@ export class GameManager extends Component {
         reboundAngle = Math.max(0.42, Math.min(Math.PI - 0.42, reboundAngle));
 
         // 连踢层级强化（速度与伤害随连击递增）：
-        // 第1脚起手：0.70x 速度，1.00x 伤害
-        // 第2脚截击：0.85x 速度，1.25x 伤害
-        // 第3脚连击：1.00x 速度，1.60x 伤害
-        // 第4脚凌空：1.15x 速度，2.00x 伤害
-        // 第5脚+无影：1.25x 速度，2.50x 伤害
-        const speedTiers = [0.70, 0.85, 1.00, 1.15, 1.25];
+        // 第1脚起手：0.52x 速度，1.00x 伤害
+        // 第2脚截击：0.68x 速度，1.25x 伤害
+        // 第3脚连击：0.84x 速度，1.60x 伤害
+        // 第4脚凌空：0.98x 速度，2.00x 伤害
+        // 第5脚+无影：1.12x 速度，2.50x 伤害
+        const speedTiers = [0.52, 0.68, 0.84, 0.98, 1.12];
         const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)];
         const dmgTiers = [1.0, 1.25, 1.6, 2.0, 2.5];
         const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)];
@@ -1010,7 +1009,7 @@ export class GameManager extends Component {
       drawBrick(gfx, b);
     }
 
-    // 3. Aim trajectory (when charging regular ball - starts from Bruce Lee's actual location with gentle 70% speed)
+    // 3. Aim trajectory (when charging regular ball - starts from Bruce Lee's actual location with gentle 52% speed)
     if (this.isCharging) {
       const startX = this.player.x;
       const startY = CONFIG.GROUND_Y + 20;
@@ -1020,13 +1019,13 @@ export class GameManager extends Component {
       const zone = this.getPowerZone(this.powerPos);
       const isSuper = zone === 'RED';
       const modeCfg = CONFIG.MODES[this.mode];
-      const speed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * (isSuper ? 1.4 : 1.0) * 0.70;
+      const speed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier * (isSuper ? 1.20 : 1.0) * 0.52;
 
       const trajectory = physicsSystem.predictTrajectory(
         startX, startY,
         (dx / len) * speed,
         (dy / len) * speed,
-        CONFIG.GRAVITY, 36
+        CONFIG.GRAVITY, 45
       );
       drawAimLine(gfx, trajectory, isSuper);
     }
@@ -1184,7 +1183,7 @@ export class GameManager extends Component {
         ctx.fillText('🥋 左右拖拽或按A/D控制李小龙走位！接住回弹球可无限连踢升级！', cw / 2, Math.round(42 * scale));
       } else if (this.isCharging) {
         ctx.fillStyle = '#6EE7B7';
-        ctx.fillText('🎯 瞄准中... 松手击发！(起手70%球速，做好截球准备)', cw / 2, Math.round(42 * scale));
+        ctx.fillText('🎯 瞄准中... 松手击发！(起手舒缓慢速，做好截球准备)', cw / 2, Math.round(42 * scale));
       } else {
         ctx.fillStyle = '#CBD5E1';
         ctx.fillText('👆 拖拽瞄准击发首球 | 左右移动截接回弹 | 点击技能直接释放', cw / 2, Math.round(42 * scale));

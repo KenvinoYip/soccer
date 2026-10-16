@@ -337,7 +337,7 @@ export function drawBallLandingMarker(gfx: Graphics, balls: BallData[], playerX:
 
         for (let step = 0; step < 50; step++) {
             simX += simVx;
-            simVy -= 0.45; // CONFIG.GRAVITY
+            simVy -= CONFIG.GRAVITY;
             simY += simVy;
 
             // Lateral wall bouncing in prediction

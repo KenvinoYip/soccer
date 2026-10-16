@@ -128,7 +128,7 @@ export const CONFIG = {
     WALL_TOP: 290,
     WALL_BOTTOM: 130,
     BALL_MAX_SPEED: 28,
-    GRAVITY: 0.38,
+    GRAVITY: 0.18,
 
     CANVAS: {
         W: 440,
@@ -154,7 +154,7 @@ export const CONFIG = {
     },
 
     PHYSICS: {
-        GRAVITY: 0.38,
+        GRAVITY: 0.18,
         BALL_MAX_SPEED: 28,
         BALL_MIN_SPEED: 7,
         WALL_ELASTICITY: 0.94,
