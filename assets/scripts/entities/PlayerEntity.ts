@@ -12,6 +12,13 @@ function hexToColor(hex: string, alpha: number = 255): Color {
 
 export type KickType = 'side' | 'bicycle' | 'spin' | 'shadowless';
 
+export interface ScarfNode {
+    x: number;
+    y: number;
+    oldX: number;
+    oldY: number;
+}
+
 /**
  * High-End 2D Anime Hero Sprite Player
  * - Bruce Lee Jeet Kune Do Multi-Action Repertoire:
@@ -22,6 +29,7 @@ export type KickType = 'side' | 'bicycle' | 'spin' | 'shadowless';
  *   5. Foshan Shadowless Rapid-Fire Kick (佛山无影连环脚)
  * - Automatic background transparency keying
  * - Dynamic kick angle tilt, martial Ki flame aura, and ground contact shadow
+ * - Verlet Integration Physics Scarf (新国风赤红水墨长围巾物理节点)
  */
 export class PlayerEntity {
     public x: number = 0;
@@ -51,11 +59,17 @@ export class PlayerEntity {
     // Flash-step dash shadow afterimages
     private _dashTrails: { x: number; y: number; alpha: number }[] = [];
 
+    // Verlet Ribbon Physics Scarf Nodes (新国风赤红水墨长围巾物理节点)
+    private _scarfNodes: ScarfNode[] = [];
+    private readonly SCARF_SEG_COUNT: number = 16;
+    private readonly SCARF_SEG_LEN: number = 6.4;
+
     constructor(x: number = 0, y: number = -240) {
         this.x = x;
         this.targetX = x;
         this.y = y;
         this._initHeroSprites();
+        this._initScarf();
     }
 
     public reset(x: number = 0, y: number = -240): void {
@@ -73,6 +87,7 @@ export class PlayerEntity {
         this._gestureTimer = 0;
         this._isGesturing = false;
         this._dashTrails = [];
+        this._initScarf();
     }
 
     private _initHeroSprites(): void {
@@ -174,10 +189,130 @@ export class PlayerEntity {
                     alpha: 0.65 - i * 0.12
                 });
             }
+            // Whip scarf backwards with dramatic inertia!
+            for (let i = 1; i < this._scarfNodes.length; i++) {
+                this._scarfNodes[i].oldX += dist * 0.55;
+            }
         }
         this.x = clampedX;
         this.targetX = clampedX;
         this.vx = 0;
+    }
+
+    private _initScarf(): void {
+        this._scarfNodes = [];
+        const rootX = this.x - 4;
+        const rootY = this.y + 36;
+        for (let i = 0; i < this.SCARF_SEG_COUNT; i++) {
+            this._scarfNodes.push({
+                x: rootX - i * this.SCARF_SEG_LEN,
+                y: rootY - i * 1.2,
+                oldX: rootX - i * this.SCARF_SEG_LEN,
+                oldY: rootY - i * 1.2,
+            });
+        }
+    }
+
+    private _updateScarfPhysics(): void {
+        if (this._scarfNodes.length === 0) {
+            this._initScarf();
+            return;
+        }
+
+        // Determine neck attachment point in Cocos coords
+        let neckX = this.x - 4;
+        let neckY = this.y + 36;
+
+        const isKicking = this.kickFrame >= 2;
+        const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
+
+        if (isKicking) {
+            if (this.currentKickType === 'bicycle') {
+                const jumpY = 82 * Math.sin(Math.min(1, progress * 1.35) * Math.PI);
+                neckX = this.x - 12 + progress * 10;
+                neckY = this.y + jumpY + 16;
+            } else if (this.currentKickType === 'spin') {
+                const jumpY = 52 * Math.sin(progress * Math.PI);
+                const spinAngle = progress * Math.PI * 2;
+                neckX = this.x + Math.sin(spinAngle) * 8;
+                neckY = this.y + jumpY + 30;
+            } else if (this.currentKickType === 'side') {
+                const jumpY = 38 * Math.sin(Math.min(1, progress * 1.5) * Math.PI);
+                neckX = this.x - 16 + progress * 12;
+                neckY = this.y + jumpY + 30;
+            } else {
+                neckX = this.x - 4;
+                neckY = this.y + 45 + 32;
+            }
+        } else if (this.isCharging) {
+            neckX = this.x - 6;
+            neckY = this.y + 26;
+        } else {
+            const hopPhase = (this._animTimer * 6.5) % (Math.PI * 2);
+            const hopY = Math.max(0, Math.sin(hopPhase)) * 4.8 + Math.sin(hopPhase * 2) * 1.5;
+            const swayX = Math.sin(this._animTimer * 3.2) * 2.8;
+            neckX = this.x - 4 + swayX;
+            neckY = this.y + 36 + hopY;
+        }
+
+        // Pin root node
+        this._scarfNodes[0].x = neckX;
+        this._scarfNodes[0].y = neckY;
+
+        // Verlet integration for nodes 1..N-1
+        for (let i = 1; i < this._scarfNodes.length; i++) {
+            const node = this._scarfNodes[i];
+            const vx = (node.x - node.oldX) * 0.88;
+            const vy = (node.y - node.oldY) * 0.88;
+
+            const moveWindX = -this.vx * 0.65;
+            const ambientWaveX = -1.8 + Math.sin(this._animTimer * 5.5 + i * 0.45) * 1.5;
+            const ambientWaveY = Math.cos(this._animTimer * 4.8 + i * 0.38) * 0.9 - 0.35;
+
+            let actionForceX = 0;
+            let actionForceY = 0;
+            if (isKicking) {
+                if (this.currentKickType === 'bicycle') {
+                    actionForceY = -3.8;
+                    actionForceX = -3.2;
+                } else if (this.currentKickType === 'spin') {
+                    const spinT = (progress - 0.18) / 0.52;
+                    const swirlAngle = (spinT * Math.PI * 2) - (i * 0.32);
+                    actionForceX = Math.cos(swirlAngle) * 5.5;
+                    actionForceY = Math.sin(swirlAngle) * 4.2;
+                } else if (this.currentKickType === 'side') {
+                    actionForceX = -5.8;
+                    actionForceY = 1.2;
+                }
+            }
+
+            node.oldX = node.x;
+            node.oldY = node.y;
+            node.x += vx + moveWindX + ambientWaveX + actionForceX;
+            node.y += vy + ambientWaveY + actionForceY;
+        }
+
+        // Distance constraint relaxation (5 iterations)
+        for (let iter = 0; iter < 5; iter++) {
+            for (let i = 0; i < this._scarfNodes.length - 1; i++) {
+                const p1 = this._scarfNodes[i];
+                const p2 = this._scarfNodes[i + 1];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const dist = Math.hypot(dx, dy) || 1;
+                const diff = (dist - this.SCARF_SEG_LEN) / dist;
+
+                if (i === 0) {
+                    p2.x -= dx * diff;
+                    p2.y -= dy * diff;
+                } else {
+                    p1.x += dx * diff * 0.45;
+                    p1.y += dy * diff * 0.45;
+                    p2.x -= dx * diff * 0.55;
+                    p2.y -= dy * diff * 0.55;
+                }
+            }
+        }
     }
 
     public update(): void {
@@ -237,6 +372,9 @@ export class PlayerEntity {
         } else {
             this.auraAlpha = Math.max(0, this.auraAlpha - 0.04);
         }
+
+        // Real-Time Verlet Physics Integration for the Flowing Scarf
+        this._updateScarfPhysics();
     }
 
     public draw(gfx: Graphics, ctx?: CanvasRenderingContext2D | null): void {
@@ -247,19 +385,16 @@ export class PlayerEntity {
 
         if (this.kickFrame === 0 && !this.isCharging) {
             if (this._isGesturing) {
-                // Signature nose-flick taunt pose (擦鼻亮相，停顿微晃)
                 hopY = 1.5;
                 swayX = 2.0;
             } else {
-                // Springy Bruce Lee double-bounce footwork
                 const hopPhase = (this._animTimer * 6.5) % (Math.PI * 2);
                 hopY = Math.max(0, Math.sin(hopPhase)) * 4.8 + Math.sin(hopPhase * 2) * 1.5;
                 swayX = Math.sin(this._animTimer * 3.2) * 2.8;
             }
         } else if (this.isCharging) {
-            // Charging crouch drop (蓄势下沉，龙伏深潭)
             hopY = -6.0;
-            swayX = (Math.random() - 0.5) * 2.2; // High-tension vibration
+            swayX = (Math.random() - 0.5) * 2.2;
         }
 
         const py = this.y + hopY;
@@ -273,7 +408,7 @@ export class PlayerEntity {
             this._drawAura(gfx, currentPx, py);
         }
 
-        // 3. Draw Real High-Res Anime Character Sprite on 2D Overlay Canvas
+        // 3. Draw on 2D Overlay Canvas
         if (ctx) {
             const cw = ctx.canvas.width;
             const ch = ctx.canvas.height;
@@ -292,24 +427,37 @@ export class PlayerEntity {
                 ctx.globalAlpha = dt.alpha * 0.42;
                 ctx.shadowColor = '#00E5FF';
                 ctx.shadowBlur = 10 * scale;
-                this._drawIdleSprite(ctx, trailCx, trailCy, scale);
+                this._drawIdleNinja(ctx, trailCx, trailCy, scale);
                 ctx.restore();
             }
 
             if (this.kickFrame >= 2) {
-                // ── A. Multi-Action Martial Arts Kicks (多招式真功夫特写) ──
-                const kickSource = this._transparentKickCanvas || this._heroKickImg;
-                if (kickSource) {
-                    const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
-                    this._drawActionKick(ctx, kickSource, cx, cy, scale, progress);
-                    this._drawInkBrushSmear(ctx, cx, cy, scale);
-                } else {
-                    this._drawIdleSprite(ctx, cx, cy, scale);
+                // ── A. Multi-Action Martial Arts Kicks (四段式真实武术起承转合) ──
+                const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
+                switch (this.currentKickType) {
+                    case 'bicycle':
+                        this._drawArticulatedBicycleKick(ctx, cx, cy, scale, progress);
+                        break;
+                    case 'spin':
+                        this._drawArticulatedSpinKick(ctx, cx, cy, scale, progress);
+                        break;
+                    case 'shadowless':
+                        this._drawArticulatedShadowlessKick(ctx, cx, cy, scale, progress);
+                        break;
+                    case 'side':
+                    default:
+                        this._drawArticulatedSideKick(ctx, cx, cy, scale, progress);
+                        break;
                 }
+                this._drawInkBrushSmear(ctx, cx, cy, scale);
             } else {
                 // ── B. Neo-Ink Wash Shaolin Shadow Ninja Guard Stance ──
-                this._drawIdleSprite(ctx, cx, cy, scale);
+                this._drawIdleNinja(ctx, cx, cy, scale);
+                this._drawSoccerBallAtFoot(ctx, cx, cy, scale);
             }
+
+            // ── C. Universal Verlet Ribbon Physics Scarf (跨越所有动作的物理水墨流体长围巾) ──
+            this._drawVerletScarf(ctx, scale);
 
             ctx.restore();
         } else {
@@ -323,191 +471,515 @@ export class PlayerEntity {
         }
     }
 
-    private _drawActionKick(
+    private _drawArticulatedBicycleKick(
         ctx: CanvasRenderingContext2D,
-        kickSource: HTMLCanvasElement | HTMLImageElement,
         cx: number,
         cy: number,
         scale: number,
         progress: number
     ): void {
-        const kw = 175;
-        const kh = 175;
+        // ── 倒挂金钩·凌空背跃双脚踢出 (四段式物理姿态) ──
+        let jumpY = 0;
+        let jumpX = 0;
+        let bodyAngle = 0;
+        let leadLegAngle = -Math.PI * 0.46; // ~-83° straight up
+        let followLegAngle = -Math.PI * 0.58; // ~-105°
+        let kneeBend = 0;
 
-        switch (this.currentKickType) {
-            case 'bicycle': {
-                // ── 倒挂金钩·凌空背跃双脚踢出 (Inverted Bicycle Kick / 背着地双脚踢出) ──
-                // 跳跃轨迹：高空大弧度背飞后跃 (跃起高达76px)
-                const jumpY = -76 * Math.sin(Math.min(1, progress * 1.3) * Math.PI) * scale;
-                const jumpX = -10 * Math.sin(progress * Math.PI) * scale;
-                const activeCx = cx + jumpX;
-                const activeCy = cy + jumpY;
+        if (progress < 0.20) {
+            // 预备蓄力：深蹲压缩 (Squash)
+            const t = progress / 0.20;
+            jumpY = 8 * Math.sin(t * Math.PI) * scale;
+            bodyAngle = 0.22 * Math.sin(t * Math.PI);
+            leadLegAngle = -Math.PI * 0.25;
+            followLegAngle = -Math.PI * 0.35;
+            kneeBend = 1.0;
+        } else if (progress < 0.65) {
+            // 腾空绝杀：大弧度倒挂金钩！(Snap & Extension)
+            const t = (progress - 0.20) / 0.45;
+            jumpY = -84 * Math.sin(t * Math.PI * 0.95) * scale;
+            jumpX = (12 * t) * scale;
+            bodyAngle = -2.25 + 0.15 * Math.sin(t * Math.PI);
+            kneeBend = Math.max(0, 1 - t * 2.5); // 膝盖从屈膝瞬间弹直！
+        } else {
+            // 受身落地：空中团身翻滚 (Roll & Cushion)
+            const t = (progress - 0.65) / 0.35;
+            jumpY = -84 * (1 - t) * scale;
+            jumpX = (12 + 16 * t) * scale;
+            bodyAngle = -2.25 - t * Math.PI * 1.2;
+        }
 
-                // 身体倾角：完全倒挂横背向地，双脚直指长空！
-                // 角度约 -120° ~ -135° (-2.18 ~ -2.35 rad)
-                const kickAngle = -2.18 + (1 - progress) * 0.22;
-                const kickScale = (this.isSuper ? 1.22 : 1.14) * scale;
+        const activeCx = cx + jumpX;
+        const activeCy = cy + jumpY;
 
-                // 1. 绘制“双脚踢出”的剪刀脚双飞残影 (展现两只脚同时凌空暴射)
-                ctx.save();
-                ctx.translate(activeCx + 22 * scale, activeCy - 12 * scale);
-                ctx.rotate(kickAngle + 0.18);
-                ctx.scale(kickScale * 0.96, kickScale * 0.96);
-                ctx.globalAlpha = 0.52;
-                ctx.shadowColor = this.isSuper ? '#FFD700' : '#FF6B35';
-                ctx.shadowBlur = 12 * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                ctx.restore();
+        ctx.save();
+        ctx.translate(activeCx, activeCy);
+        ctx.rotate(bodyAngle);
 
-                // 2. 绘制主体倒挂身躯
+        const kickScale = (this.isSuper ? 1.18 : 1.08) * scale;
+        ctx.scale(kickScale, kickScale);
+
+        // 1. 剪刀双飞残影
+        if (progress >= 0.20 && progress <= 0.65) {
+            ctx.save();
+            ctx.translate(-8 * scale, 12 * scale);
+            ctx.globalAlpha = 0.38;
+            ctx.shadowColor = this.isSuper ? '#FFD700' : '#FF4757';
+            ctx.shadowBlur = 14 * scale;
+            this._drawInvertedNinjaBody(ctx, scale, leadLegAngle - 0.12, followLegAngle - 0.12, 0);
+            ctx.restore();
+        }
+
+        // 2. 主体倒挂身躯与伸展双腿
+        this._drawInvertedNinjaBody(ctx, scale, leadLegAngle, followLegAngle, kneeBend);
+
+        ctx.restore();
+
+        // 3. 双脚脚尖双喷射天火火箭尾焰与冲击波
+        if (progress >= 0.20 && progress < 0.75) {
+            const foot1X = activeCx + 38 * scale;
+            const foot1Y = activeCy - 62 * scale;
+            const foot2X = activeCx + 18 * scale;
+            const foot2Y = activeCy - 48 * scale;
+
+            this._drawFootFlameJet(ctx, foot1X, foot1Y, scale, this.isSuper);
+            this._drawFootFlameJet(ctx, foot2X, foot2Y, scale * 0.85, this.isSuper);
+
+            this._drawKickBallBlast(ctx, foot1X + 8 * scale, foot1Y - 12 * scale, scale, -Math.PI * 0.48, progress, this.isSuper);
+        }
+    }
+
+    private _drawInvertedNinjaBody(
+        ctx: CanvasRenderingContext2D,
+        scale: number,
+        leg1Angle: number,
+        leg2Angle: number,
+        kneeBend: number
+    ): void {
+        // Torso: Athletic combat tunic
+        ctx.fillStyle = '#151D2A';
+        ctx.beginPath();
+        ctx.moveTo(-14 * scale, -10 * scale);
+        ctx.lineTo(14 * scale, -10 * scale);
+        ctx.lineTo(10 * scale, 20 * scale);
+        ctx.lineTo(-12 * scale, 20 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shaolin Golden Belt
+        ctx.fillStyle = '#E67E22';
+        ctx.fillRect(-13 * scale, 16 * scale, 24 * scale, 4.5 * scale);
+        ctx.fillStyle = '#F39C12';
+        ctx.fillRect(-13 * scale, 17 * scale, 24 * scale, 2 * scale);
+
+        // Head & Cowl
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(-2 * scale, -22 * scale, 12 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glowing Razor Eye Visor Flare
+        const eyeColor = this.isSuper ? '#FF3838' : '#FFD700';
+        ctx.shadowColor = eyeColor;
+        ctx.shadowBlur = 12 * scale;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(2 * scale, -23 * scale);
+        ctx.lineTo(10 * scale, -21 * scale);
+        ctx.lineTo(8 * scale, -19 * scale);
+        ctx.lineTo(1 * scale, -21 * scale);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = eyeColor;
+        ctx.lineWidth = 1.8 * scale;
+        ctx.beginPath();
+        ctx.moveTo(-2 * scale, -22 * scale);
+        ctx.lineTo(16 * scale, -20 * scale);
+        ctx.stroke();
+
+        // Arms in Acrobat Balance Guard
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-12 * scale, -8 * scale);
+        ctx.lineTo(-24 * scale, 6 * scale);
+        ctx.lineTo(-18 * scale, 18 * scale);
+        ctx.lineTo(-8 * scale, 4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#1B2332';
+        ctx.beginPath();
+        ctx.moveTo(10 * scale, -8 * scale);
+        ctx.lineTo(22 * scale, 2 * scale);
+        ctx.lineTo(16 * scale, 14 * scale);
+        ctx.lineTo(6 * scale, 4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // ── Leg 2 (Rear scissor leg) ──
+        ctx.save();
+        ctx.translate(-4 * scale, 20 * scale);
+        ctx.rotate(leg2Angle + Math.PI / 2);
+        this._drawNinjaLimb(ctx, scale, 28 * scale, 30 * scale, kneeBend * 0.4, '#111722');
+        ctx.restore();
+
+        // ── Leg 1 (Lead kicking leg) ──
+        ctx.save();
+        ctx.translate(4 * scale, 20 * scale);
+        ctx.rotate(leg1Angle + Math.PI / 2);
+        this._drawNinjaLimb(ctx, scale, 32 * scale, 32 * scale, kneeBend * 0.2, '#18202D');
+        ctx.restore();
+    }
+
+    private _drawArticulatedSpinKick(
+        ctx: CanvasRenderingContext2D,
+        cx: number,
+        cy: number,
+        scale: number,
+        progress: number
+    ): void {
+        // ── 360° 狂暴旋风回旋踢·神龙摆尾 ──
+        let jumpY = 0;
+        let spinAngle = 0;
+
+        if (progress < 0.18) {
+            const t = progress / 0.18;
+            jumpY = 6 * Math.sin(t * Math.PI) * scale;
+            spinAngle = -0.35 * Math.sin(t * Math.PI * 0.5);
+        } else if (progress < 0.70) {
+            const t = (progress - 0.18) / 0.52;
+            jumpY = -52 * Math.sin(t * Math.PI) * scale;
+            spinAngle = t * Math.PI * 2;
+        } else {
+            const t = (progress - 0.70) / 0.30;
+            jumpY = -12 * (1 - t) * scale;
+            spinAngle = Math.PI * 2 + 0.15 * (1 - t);
+        }
+
+        const activeCx = cx;
+        const activeCy = cy + jumpY;
+        const kickScale = (this.isSuper ? 1.16 : 1.06) * scale;
+
+        // 1. 360° 旋风残影
+        if (progress >= 0.18 && progress <= 0.70) {
+            for (const ghost of [{ angleOffset: -0.38, alpha: 0.35, color: '#00E5FF' }, { angleOffset: -0.72, alpha: 0.22, color: '#FFD700' }]) {
                 ctx.save();
                 ctx.translate(activeCx, activeCy);
-                ctx.rotate(kickAngle);
-                ctx.scale(kickScale, kickScale);
-                ctx.shadowColor = this.isSuper ? '#FFE600' : '#FF9F1C';
-                ctx.shadowBlur = (this.isSuper ? 18 : 10) * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                ctx.restore();
-
-                // 3. 双脚脚尖双喷射天火火箭尾焰 (烈焰向下推进，排空起跳)
-                if (progress < 0.8) {
-                    const foot1X = activeCx + 38 * scale;
-                    const foot1Y = activeCy - 58 * scale;
-                    const foot2X = activeCx + 18 * scale;
-                    const foot2Y = activeCy - 44 * scale;
-
-                    this._drawFootFlameJet(ctx, foot1X, foot1Y, scale, this.isSuper);
-                    this._drawFootFlameJet(ctx, foot2X, foot2Y, scale * 0.85, this.isSuper);
-                }
-                break;
-            }
-
-            case 'spin': {
-                // ── 360° 狂暴旋风回旋踢·神龙摆尾 (Whirlwind Spinning Kick) ──
-                const jumpY = -50 * Math.sin(progress * Math.PI) * scale;
-                const activeCx = cx;
-                const activeCy = cy + jumpY;
-
-                // 360° 旋转角速度 (完整一周旋转)
-                const spinAngle = progress * Math.PI * 2 + 0.15;
-                const kickScale = (1.12 + 0.08 * Math.sin(spinAngle * 2)) * scale * (this.isSuper ? 1.16 : 1.05);
-
-                // 1. 旋风残影 1 (滞后 0.38 rad)
-                ctx.save();
-                ctx.translate(activeCx, activeCy);
-                ctx.rotate(spinAngle - 0.38);
-                ctx.scale(kickScale * 0.95, kickScale * 0.95);
-                ctx.globalAlpha = 0.38;
-                ctx.shadowColor = '#00E5FF';
+                ctx.rotate(spinAngle + ghost.angleOffset);
+                ctx.scale(kickScale * 0.94, kickScale * 0.94);
+                ctx.globalAlpha = ghost.alpha;
+                ctx.shadowColor = ghost.color;
                 ctx.shadowBlur = 14 * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                this._drawSpinningNinjaBody(ctx, scale);
                 ctx.restore();
-
-                // 2. 旋风残影 2 (滞后 0.72 rad)
-                ctx.save();
-                ctx.translate(activeCx, activeCy);
-                ctx.rotate(spinAngle - 0.72);
-                ctx.scale(kickScale * 0.90, kickScale * 0.90);
-                ctx.globalAlpha = 0.22;
-                ctx.shadowColor = '#FFD700';
-                ctx.shadowBlur = 10 * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                ctx.restore();
-
-                // 3. 回旋踢主体
-                ctx.save();
-                ctx.translate(activeCx, activeCy);
-                ctx.rotate(spinAngle);
-                ctx.scale(kickScale, kickScale);
-                ctx.shadowColor = this.isSuper ? '#FFE600' : '#FF9F1C';
-                ctx.shadowBlur = 14 * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                ctx.restore();
-                break;
-            }
-
-            case 'shadowless': {
-                // ── 佛山无影连环脚 (Foshan Shadowless Multi-Kick) ──
-                const midAirY = -46 * scale;
-                const vibX = Math.sin(this.kickTimer * 3.2) * 12 * scale;
-                const activeCx = cx + vibX;
-                const activeCy = cy + midAirY;
-                const kickScale = (this.isSuper ? 1.20 : 1.12) * scale;
-
-                // 三道炫彩高频影分身残影 (青蓝、赤红、辉金)
-                const ghosts = [
-                    { offX: -26 * scale, offY: 4 * scale, alpha: 0.35, color: '#00E5FF' },
-                    { offX: -14 * scale, offY: -4 * scale, alpha: 0.50, color: '#FF3838' },
-                    { offX: 14 * scale, offY: 2 * scale, alpha: 0.50, color: '#FFD700' }
-                ];
-                for (const g of ghosts) {
-                    ctx.save();
-                    ctx.translate(activeCx + g.offX, activeCy + g.offY);
-                    ctx.rotate(0.12);
-                    ctx.scale(kickScale, kickScale);
-                    ctx.globalAlpha = g.alpha;
-                    ctx.shadowColor = g.color;
-                    ctx.shadowBlur = 12 * scale;
-                    ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                    ctx.restore();
-                }
-
-                // 主体飞踢
-                ctx.save();
-                ctx.translate(activeCx, activeCy);
-                ctx.rotate(0.12);
-                ctx.scale(kickScale, kickScale);
-                ctx.shadowColor = '#FFE600';
-                ctx.shadowBlur = 16 * scale;
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                ctx.restore();
-                break;
-            }
-
-            case 'side':
-            default: {
-                // ── 经典凌空飞龙侧踢 ──
-                const midAirY = this.kickFrame === 2 ? -44 * scale : -20 * scale;
-                const midAirX = this.kickFrame === 2 ? 16 * scale : 6 * scale;
-                ctx.translate(cx + midAirX, cy + midAirY);
-
-                const kickAngle = this.kickFrame === 2 ? 0.14 : 0.04;
-                ctx.rotate(kickAngle);
-                const kickScale = (this.isSuper ? 1.18 : 1.10) * scale;
-                ctx.scale(kickScale, kickScale);
-                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
-                break;
             }
         }
 
-        // ── 踢击瞬间足尖暴射破空足球 (Soccer Ball Launch Blast) ──
+        // 2. 回旋踢主体
+        ctx.save();
+        ctx.translate(activeCx, activeCy);
+        ctx.rotate(spinAngle);
+        ctx.scale(kickScale, kickScale);
+        ctx.shadowColor = this.isSuper ? '#FFE600' : '#FF9F1C';
+        ctx.shadowBlur = (this.isSuper ? 16 : 10) * scale;
+        this._drawSpinningNinjaBody(ctx, scale);
+        ctx.restore();
+
+        // 3. 旋风足尖烈焰与抽球冲击波
+        if (progress >= 0.25 && progress < 0.75) {
+            const footX = activeCx + Math.cos(spinAngle) * 44 * scale;
+            const footY = activeCy + Math.sin(spinAngle) * 44 * scale;
+            this._drawFootFlameJet(ctx, footX, footY, scale, this.isSuper);
+            this._drawKickBallBlast(ctx, footX + 10 * scale, footY - 10 * scale, scale, -0.65, progress, this.isSuper);
+        }
+    }
+
+    private _drawSpinningNinjaBody(ctx: CanvasRenderingContext2D, scale: number): void {
+        // Torso
+        ctx.fillStyle = '#151D2A';
+        ctx.beginPath();
+        ctx.arc(0, 0, 11 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Golden belt
+        ctx.fillStyle = '#E67E22';
+        ctx.fillRect(-8 * scale, -2 * scale, 16 * scale, 4 * scale);
+
+        // Head with glowing eye visor
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(0, -18 * scale, 11 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        const eyeColor = this.isSuper ? '#FF3838' : '#FFD700';
+        ctx.shadowColor = eyeColor;
+        ctx.shadowBlur = 10 * scale;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(1 * scale, -19 * scale, 7 * scale, 2.5 * scale);
+
+        // Tucked support leg
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-4 * scale, 6 * scale);
+        ctx.lineTo(-14 * scale, 14 * scale);
+        ctx.lineTo(-8 * scale, 22 * scale);
+        ctx.lineTo(0, 10 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Horizontal whipping kicking leg
+        ctx.fillStyle = '#18202D';
+        ctx.beginPath();
+        ctx.moveTo(4 * scale, -3 * scale);
+        ctx.lineTo(42 * scale, -3 * scale);
+        ctx.lineTo(42 * scale, 5 * scale);
+        ctx.lineTo(4 * scale, 5 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(28 * scale, -4 * scale, 10 * scale, 8 * scale);
+        ctx.fillStyle = '#0B0F15';
+        ctx.fillRect(38 * scale, -5 * scale, 10 * scale, 10 * scale);
+    }
+
+    private _drawArticulatedSideKick(
+        ctx: CanvasRenderingContext2D,
+        cx: number,
+        cy: number,
+        scale: number,
+        progress: number
+    ): void {
+        // ── 飞龙侧踢·力透千钧 ──
+        let jumpY = 0;
+        let glideX = 0;
+        let chamberT = 0;
+
+        if (progress < 0.20) {
+            const t = progress / 0.20;
+            jumpY = 6 * Math.sin(t * Math.PI) * scale;
+            glideX = -4 * t * scale;
+            chamberT = t;
+        } else if (progress < 0.75) {
+            const t = (progress - 0.20) / 0.55;
+            jumpY = -40 * Math.sin(Math.min(1, t * 1.4) * Math.PI) * scale;
+            glideX = (22 * Math.sin(Math.min(1, t * 1.2) * Math.PI * 0.5)) * scale;
+            chamberT = 1.0;
+        } else {
+            const t = (progress - 0.75) / 0.25;
+            jumpY = -14 * (1 - t) * scale;
+            glideX = (22 * (1 - t * 0.4)) * scale;
+            chamberT = 1 - t;
+        }
+
+        const activeCx = cx + glideX;
+        const activeCy = cy + jumpY;
+        const kickScale = (this.isSuper ? 1.18 : 1.08) * scale;
+
+        ctx.save();
+        ctx.translate(activeCx, activeCy);
+        const bodyLean = progress >= 0.20 ? -0.22 : 0;
+        ctx.rotate(bodyLean);
+        ctx.scale(kickScale, kickScale);
+
+        // Support Leg
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-10 * scale, 4 * scale);
+        ctx.lineTo(-24 * scale, 18 * scale);
+        ctx.lineTo(-30 * scale, 34 * scale);
+        ctx.lineTo(-18 * scale, 34 * scale);
+        ctx.lineTo(-14 * scale, 22 * scale);
+        ctx.lineTo(-2 * scale, 4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(-28 * scale, 24 * scale, 10 * scale, 8 * scale);
+        ctx.fillStyle = '#0B0F15';
+        ctx.fillRect(-31 * scale, 32 * scale, 14 * scale, 5 * scale);
+
+        // Torso
+        ctx.fillStyle = '#151D2A';
+        ctx.beginPath();
+        ctx.moveTo(-16 * scale, -22 * scale);
+        ctx.lineTo(12 * scale, -22 * scale);
+        ctx.lineTo(8 * scale, 6 * scale);
+        ctx.lineTo(-12 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shaolin Golden Belt
+        ctx.fillStyle = '#E67E22';
+        ctx.fillRect(-12 * scale, 3 * scale, 22 * scale, 5 * scale);
+
+        // Head with eye visor
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(-2 * scale, -34 * scale, 12 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        const eyeColor = this.isSuper ? '#FF3838' : '#FFD700';
+        ctx.shadowColor = eyeColor;
+        ctx.shadowBlur = 12 * scale;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(1 * scale, -34 * scale, 8 * scale, 2.5 * scale);
+
+        // Arms in Jeet Kune Do Guard
+        ctx.fillStyle = '#1B2332';
+        ctx.beginPath();
+        ctx.moveTo(-14 * scale, -18 * scale);
+        ctx.lineTo(-24 * scale, -6 * scale);
+        ctx.lineTo(-16 * scale, 2 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Kicking Leg (Thrusts like a spear)
+        const extend = progress < 0.20 ? chamberT * 25 : progress < 0.75 ? 58 : 58 - (progress - 0.75) * 80;
+        const heelX = extend * scale;
+        const heelY = (-12 + (progress >= 0.20 ? -16 : 0)) * scale;
+
+        ctx.fillStyle = '#18202D';
+        ctx.beginPath();
+        ctx.moveTo(4 * scale, -6 * scale);
+        ctx.lineTo(heelX * 0.45, heelY * 0.5 - 6 * scale);
+        ctx.lineTo(heelX, heelY);
+        ctx.lineTo(heelX - 4 * scale, heelY + 8 * scale);
+        ctx.lineTo(heelX * 0.45, heelY * 0.5 + 4 * scale);
+        ctx.lineTo(0, 4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(heelX - 16 * scale, heelY - 4 * scale, 12 * scale, 7 * scale);
+        ctx.fillStyle = '#0B0F15';
+        ctx.fillRect(heelX - 6 * scale, heelY - 5 * scale, 14 * scale, 8 * scale);
+
+        ctx.restore();
+
+        // Foot fire & blast
+        if (progress >= 0.20 && progress < 0.75) {
+            const footX = activeCx + 56 * scale;
+            const footY = activeCy - 28 * scale;
+            this._drawFootFlameJet(ctx, footX, footY, scale, this.isSuper);
+            this._drawKickBallBlast(ctx, footX + 12 * scale, footY - 8 * scale, scale, -0.52, progress, this.isSuper);
+        }
+    }
+
+    private _drawArticulatedShadowlessKick(
+        ctx: CanvasRenderingContext2D,
+        cx: number,
+        cy: number,
+        scale: number,
+        progress: number
+    ): void {
+        const midAirY = -46 * scale;
+        const vibX = Math.sin(this.kickTimer * 3.5) * 12 * scale;
+        const activeCx = cx + vibX;
+        const activeCy = cy + midAirY;
+        const kickScale = (this.isSuper ? 1.20 : 1.10) * scale;
+
+        const ghosts = [
+            { offX: -24 * scale, offY: 4 * scale, alpha: 0.35, color: '#00E5FF' },
+            { offX: -12 * scale, offY: -4 * scale, alpha: 0.50, color: '#FF3838' },
+            { offX: 14 * scale, offY: 2 * scale, alpha: 0.50, color: '#FFD700' }
+        ];
+
+        for (const g of ghosts) {
+            ctx.save();
+            ctx.translate(activeCx + g.offX, activeCy + g.offY);
+            ctx.scale(kickScale, kickScale);
+            ctx.globalAlpha = g.alpha;
+            ctx.shadowColor = g.color;
+            ctx.shadowBlur = 12 * scale;
+            this._drawShadowlessPose(ctx, scale, this.kickTimer % 2 === 0);
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(activeCx, activeCy);
+        ctx.scale(kickScale, kickScale);
+        ctx.shadowColor = '#FFE600';
+        ctx.shadowBlur = 14 * scale;
+        this._drawShadowlessPose(ctx, scale, this.kickTimer % 2 !== 0);
+        ctx.restore();
+
         if (progress < 0.75) {
-            let blastFootX = cx;
-            let blastFootY = cy;
-            let blastAngle = -0.55;
-
-            if (this.currentKickType === 'bicycle') {
-                const jumpY = -76 * Math.sin(Math.min(1, progress * 1.3) * Math.PI) * scale;
-                blastFootX = cx + 42 * scale;
-                blastFootY = cy + jumpY - 62 * scale;
-                blastAngle = -Math.PI * 0.45;
-            } else if (this.currentKickType === 'spin') {
-                const jumpY = -50 * Math.sin(progress * Math.PI) * scale;
-                blastFootX = cx + 38 * scale;
-                blastFootY = cy + jumpY - 32 * scale;
-                blastAngle = -0.65;
-            } else if (this.currentKickType === 'shadowless') {
-                blastFootX = cx + 36 * scale;
-                blastFootY = cy - 42 * scale;
-                blastAngle = -0.58;
-            } else {
-                blastFootX = cx + 45 * scale;
-                blastFootY = cy - 48 * scale;
-                blastAngle = -0.52;
-            }
-
-            this._drawKickBallBlast(ctx, blastFootX, blastFootY, scale, blastAngle, progress, this.isSuper);
+            this._drawFootFlameJet(ctx, activeCx + 42 * scale, activeCy - 24 * scale, scale, this.isSuper);
+            this._drawKickBallBlast(ctx, activeCx + 48 * scale, activeCy - 28 * scale, scale, -0.55, progress, this.isSuper);
         }
+    }
+
+    private _drawShadowlessPose(ctx: CanvasRenderingContext2D, scale: number, alt: boolean): void {
+        ctx.fillStyle = '#151D2A';
+        ctx.fillRect(-12 * scale, -20 * scale, 22 * scale, 24 * scale);
+
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(-1 * scale, -32 * scale, 11 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(1 * scale, -32 * scale, 7 * scale, 2 * scale);
+
+        const leg1Y = alt ? -18 * scale : 6 * scale;
+        const leg2Y = alt ? 6 * scale : -18 * scale;
+
+        ctx.fillStyle = '#18202D';
+        ctx.fillRect(4 * scale, leg1Y, 36 * scale, 6 * scale);
+        ctx.fillRect(-4 * scale, leg2Y, 32 * scale, 6 * scale);
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(28 * scale, leg1Y, 8 * scale, 6 * scale);
+        ctx.fillRect(22 * scale, leg2Y, 8 * scale, 6 * scale);
+    }
+
+    private _drawNinjaLimb(
+        ctx: CanvasRenderingContext2D,
+        scale: number,
+        thighLen: number,
+        shinLen: number,
+        bendFactor: number,
+        color: string
+    ): void {
+        const bendOffset = bendFactor * 14 * scale;
+        const kneeX = bendOffset;
+        const kneeY = thighLen;
+        const footX = bendOffset * 0.5;
+        const footY = thighLen + shinLen;
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(-6 * scale, 0);
+        ctx.lineTo(6 * scale, 0);
+        ctx.lineTo(kneeX + 5 * scale, kneeY);
+        ctx.lineTo(kneeX - 5 * scale, kneeY);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(kneeX - 5 * scale, kneeY);
+        ctx.lineTo(kneeX + 5 * scale, kneeY);
+        ctx.lineTo(footX + 4 * scale, footY);
+        ctx.lineTo(footX - 4 * scale, footY);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(kneeX - 4 * scale, kneeY + 6 * scale, 8 * scale, 14 * scale);
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 1.0 * scale;
+        ctx.strokeRect(kneeX - 4 * scale, kneeY + 6 * scale, 8 * scale, 14 * scale);
+
+        ctx.fillStyle = '#0B0F15';
+        ctx.beginPath();
+        ctx.moveTo(footX - 5 * scale, footY);
+        ctx.lineTo(footX + 11 * scale, footY);
+        ctx.lineTo(footX + 8 * scale, footY + 7 * scale);
+        ctx.lineTo(footX - 5 * scale, footY + 7 * scale);
+        ctx.closePath();
+        ctx.fill();
     }
 
     private _drawKickBallBlast(
@@ -746,13 +1218,12 @@ export class PlayerEntity {
 
     /**
      * Neo-Ink Wash Shaolin Shadow Ninja Idle Stance (潮酷新国风少林暗影英雄)
-     * - Dark shadow shinobi body with martial readiness
-     * - Razor-sharp glowing amber/crimson visor eyes
-     * - Giant billowing crimson hero scarf with wind cloth physics
-     * - Saffron gold Shaolin martial belt & clean white leg wraps
-     * - Waiting 3D Yin-Yang soccer ball spinning at foot
+     * - Sleek dark shinobi martial body with agile footwork bounce
+     * - Shaolin golden martial sash belt & clean white leg wraps
+     * - Ready martial guard arms
+     * - Razor-sharp glowing amber/crimson visor eyes with streak
      */
-    private _drawIdleSprite(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number = 1.0): void {
+    private _drawIdleNinja(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number = 1.0): void {
         const px = cx;
         const crouchY = (this.isCharging ? 6 : 0) * scale;
         const py = cy - 25 * scale + crouchY;
@@ -763,10 +1234,156 @@ export class PlayerEntity {
         const anim = this._animTimer;
         const hop = this.isCharging ? 0 : Math.sin(anim * 6.5) * 1.8 * scale;
         const sway = this.isCharging ? (Math.random() - 0.5) * 1.5 * scale : Math.sin(anim * 3.2) * 1.2 * scale;
-        const scarfWave1 = Math.sin(anim * 4.8);
-        const scarfWave2 = Math.cos(anim * 4.8 + 1.2);
 
-        // ── 1. The Waiting Soccer Ball at Foot (足边蓄势待发足球) ──
+        ctx.save();
+        ctx.translate(sway, hop);
+
+        // Back leg (Right leg, braced back)
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-6 * scale, 6 * scale);
+        ctx.lineTo(-20 * scale, 18 * scale);
+        ctx.lineTo(-26 * scale, 34 * scale);
+        ctx.lineTo(-14 * scale, 34 * scale);
+        ctx.lineTo(-12 * scale, 22 * scale);
+        ctx.lineTo(0, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Front leg (Left leg, leading toward the soccer ball)
+        ctx.fillStyle = '#18202D';
+        ctx.beginPath();
+        ctx.moveTo(2 * scale, 6 * scale);
+        ctx.lineTo(14 * scale, 16 * scale);
+        ctx.lineTo(18 * scale, 32 * scale);
+        ctx.lineTo(26 * scale, 32 * scale);
+        ctx.lineTo(22 * scale, 20 * scale);
+        ctx.lineTo(8 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // White Shaolin leg wraps with dark cross ties (白绑腿)
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
+        ctx.fillRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 1.0 * scale;
+        ctx.strokeRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
+        ctx.strokeRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
+
+        // Ninja Combat Sneakers
+        ctx.fillStyle = '#0B0F15';
+        ctx.fillRect(-27 * scale, 32 * scale, 15 * scale, 5 * scale);
+        ctx.fillRect(14 * scale, 30 * scale, 16 * scale, 5 * scale);
+
+        // Torso: Muscular athletic shadow silhouette
+        ctx.fillStyle = '#151D2A';
+        ctx.beginPath();
+        ctx.moveTo(-16 * scale, -24 * scale);
+        ctx.lineTo(14 * scale, -24 * scale);
+        ctx.lineTo(10 * scale, 6 * scale);
+        ctx.lineTo(-12 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Chest vest contour & armor bevel
+        ctx.fillStyle = '#222C3D';
+        ctx.beginPath();
+        ctx.moveTo(-12 * scale, -22 * scale);
+        ctx.lineTo(10 * scale, -22 * scale);
+        ctx.lineTo(6 * scale, -4 * scale);
+        ctx.lineTo(-8 * scale, -4 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shaolin Golden Martial Belt & Dangling Ribbons (金刚武僧腰带)
+        ctx.fillStyle = '#E67E22';
+        ctx.fillRect(-13 * scale, 3 * scale, 25 * scale, 5 * scale);
+        ctx.fillStyle = '#F39C12';
+        ctx.fillRect(-13 * scale, 4 * scale, 25 * scale, 2 * scale);
+        ctx.beginPath();
+        ctx.arc(-2 * scale, 5 * scale, 3.5 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#D35400';
+        ctx.beginPath();
+        ctx.moveTo(-4 * scale, 6 * scale);
+        ctx.lineTo(-8 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
+        ctx.lineTo(-4 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
+        ctx.lineTo(-1 * scale, 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Arms in Kung Fu Ready Guard Stance
+        ctx.fillStyle = '#111722';
+        ctx.beginPath();
+        ctx.moveTo(-14 * scale, -22 * scale);
+        ctx.lineTo(-24 * scale, -8 * scale);
+        ctx.lineTo(-18 * scale, 2 * scale);
+        ctx.lineTo(-12 * scale, -6 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#1B2332';
+        ctx.beginPath();
+        ctx.moveTo(12 * scale, -22 * scale);
+        ctx.lineTo(24 * scale, -12 * scale);
+        ctx.lineTo(30 * scale, -4 * scale);
+        ctx.lineTo(24 * scale, 2 * scale);
+        ctx.lineTo(14 * scale, -12 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Head: Sleek Shadow Ninja Cowl
+        ctx.fillStyle = '#0F1520';
+        ctx.beginPath();
+        ctx.arc(-1 * scale, -34 * scale, 13 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(-12 * scale, -32 * scale);
+        ctx.lineTo(2 * scale, -20 * scale);
+        ctx.lineTo(11 * scale, -32 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Glowing Razor-Sharp Eye Visor Flare
+        const eyeGlowColor = this.isSuper ? '#FF3838' : '#FFD700';
+        const eyeCoreColor = '#FFFFFF';
+        ctx.shadowColor = eyeGlowColor;
+        ctx.shadowBlur = (this.isCharging ? 16 : 10) * scale;
+
+        ctx.fillStyle = eyeCoreColor;
+        ctx.beginPath();
+        ctx.moveTo(1 * scale, -34 * scale);
+        ctx.lineTo(9 * scale, -32 * scale);
+        ctx.lineTo(7 * scale, -30 * scale);
+        ctx.lineTo(0, -32 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = eyeGlowColor;
+        ctx.lineWidth = 1.8 * scale;
+        ctx.beginPath();
+        ctx.moveTo(-3 * scale, -33 * scale);
+        ctx.lineTo(16 * scale, -31 * scale);
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.restore();
+    }
+
+    /**
+     * The Waiting Soccer Ball at Foot (足边蓄势待发足球)
+     */
+    private _drawSoccerBallAtFoot(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number = 1.0): void {
+        const px = cx;
+        const crouchY = (this.isCharging ? 6 : 0) * scale;
+        const py = cy - 25 * scale + crouchY;
+
+        ctx.save();
+        ctx.translate(px, py);
+
+        const anim = this._animTimer;
         const ballX = 22 * scale;
         const ballY = 24 * scale;
         const ballR = 13 * scale;
@@ -799,7 +1416,7 @@ export class PlayerEntity {
         ctx.arc(ballX, ballY, ballR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Soccer ball pentagons (spinning when charging)
+        // Soccer ball pentagons
         const ballSpin = this.isCharging ? anim * 4.5 : anim * 0.8;
         ctx.fillStyle = this.isCharging ? '#A04000' : '#1E293B';
         ctx.strokeStyle = this.isCharging ? '#FFD700' : '#CBD5E1';
@@ -854,226 +1471,139 @@ export class PlayerEntity {
             ctx.stroke();
         }
         ctx.restore();
+        ctx.restore();
+    }
 
-        // ── 2. Ultra-Long Crimson Hero Scarf (超长飘逸赤红大围巾) ──
-        const neckX = -4 * scale + sway;
-        const neckY = -36 * scale + hop;
+    /**
+     * Universal Verlet Ribbon Physics Scarf (跨越所有动作的物理水墨流体长围巾)
+     * - 16 Verlet nodes simulation with wind and aerodynamic physics
+     * - Smooth Catmull/Bezier normal curves
+     * - Swallowtail ribbon tip with trailing flame embers & calligraphy droplets
+     */
+    private _drawVerletScarf(ctx: CanvasRenderingContext2D, scale: number = 1.0): void {
+        if (!this._scarfNodes || this._scarfNodes.length < 2) return;
+
+        const cw = ctx.canvas.width;
+        const ch = ctx.canvas.height;
+
+        // Convert Cocos nodes to Canvas screen coords
+        const pts: { x: number; y: number }[] = [];
+        for (let i = 0; i < this._scarfNodes.length; i++) {
+            const n = this._scarfNodes[i];
+            pts.push({
+                x: cw / 2 + n.x * scale,
+                y: ch / 2 - n.y * scale,
+            });
+        }
+
+        const leftPts: { x: number; y: number }[] = [];
+        const rightPts: { x: number; y: number }[] = [];
+
+        for (let i = 0; i < pts.length; i++) {
+            let tx = 0, ty = 0;
+            if (i === 0) {
+                tx = pts[1].x - pts[0].x;
+                ty = pts[1].y - pts[0].y;
+            } else if (i === pts.length - 1) {
+                tx = pts[pts.length - 1].x - pts[pts.length - 2].x;
+                ty = pts[pts.length - 1].y - pts[pts.length - 2].y;
+            } else {
+                tx = pts[i + 1].x - pts[i - 1].x;
+                ty = pts[i + 1].y - pts[i - 1].y;
+            }
+
+            const len = Math.hypot(tx, ty) || 1;
+            const nx = -ty / len;
+            const ny = tx / len;
+
+            const t = i / (pts.length - 1);
+            // Flaring width: starts at collar (~4px), expands to ~11px in middle, tapers to ~6px at tip
+            const w = (3.6 + 8.2 * Math.sin(t * Math.PI * 0.9) * (1 - t * 0.25)) * scale;
+
+            leftPts.push({ x: pts[i].x + nx * w, y: pts[i].y + ny * w });
+            rightPts.push({ x: pts[i].x - nx * w, y: pts[i].y - ny * w });
+        }
 
         ctx.save();
         ctx.shadowColor = '#C0392B';
         ctx.shadowBlur = 8 * scale;
 
-        // Scarf Layer 1: Dark Crimson Deep Shadow Silk
+        // ── Layer 1: Dark Crimson Deep Shadow Silk ──
         ctx.fillStyle = '#781515';
         ctx.beginPath();
-        ctx.moveTo(neckX, neckY);
-        ctx.bezierCurveTo(
-            neckX - 28 * scale, neckY - 14 * scale + scarfWave1 * 5,
-            neckX - 58 * scale, neckY - 34 * scale + scarfWave2 * 8,
-            neckX - 92 * scale, neckY - 58 * scale + scarfWave1 * 12
-        );
-        ctx.lineTo(neckX - 86 * scale, neckY - 68 * scale + scarfWave1 * 12);
-        ctx.bezierCurveTo(
-            neckX - 52 * scale, neckY - 44 * scale + scarfWave2 * 8,
-            neckX - 24 * scale, neckY - 24 * scale + scarfWave1 * 5,
-            neckX, neckY - 6 * scale
-        );
+        ctx.moveTo(leftPts[0].x, leftPts[0].y);
+        for (let i = 1; i < leftPts.length; i++) {
+            const mx = (leftPts[i - 1].x + leftPts[i].x) / 2;
+            const my = (leftPts[i - 1].y + leftPts[i].y) / 2;
+            ctx.quadraticCurveTo(leftPts[i - 1].x, leftPts[i - 1].y, mx, my);
+        }
+
+        // Forked swallowtail tip
+        const tail = pts[pts.length - 1];
+        const prevTail = pts[pts.length - 2];
+        const tailDirX = tail.x - prevTail.x;
+        const tailDirY = tail.y - prevTail.y;
+        const tailLen = Math.hypot(tailDirX, tailDirY) || 1;
+        const normTailX = -tailDirY / tailLen;
+        const normTailY = tailDirX / tailLen;
+
+        ctx.lineTo(tail.x + normTailX * 6 * scale, tail.y + normTailY * 6 * scale);
+        ctx.lineTo(tail.x - tailDirX * 0.4, tail.y - tailDirY * 0.4);
+        ctx.lineTo(tail.x - normTailX * 6 * scale, tail.y - normTailY * 6 * scale);
+
+        for (let i = rightPts.length - 1; i >= 0; i--) {
+            const nextIdx = i > 0 ? i - 1 : 0;
+            const mx = (rightPts[i].x + rightPts[nextIdx].x) / 2;
+            const my = (rightPts[i].y + rightPts[nextIdx].y) / 2;
+            ctx.quadraticCurveTo(rightPts[i].x, rightPts[i].y, mx, my);
+        }
         ctx.closePath();
         ctx.fill();
 
-        // Scarf Layer 2: Main Billowing Blood Red Ribbon
+        // ── Layer 2: Main Billowing Blood Red Ribbon Silk ──
         ctx.fillStyle = '#C0392B';
         ctx.beginPath();
-        ctx.moveTo(neckX + 2 * scale, neckY);
-        ctx.bezierCurveTo(
-            neckX - 25 * scale, neckY - 18 * scale + scarfWave1 * 6,
-            neckX - 54 * scale, neckY - 40 * scale + scarfWave2 * 10,
-            neckX - 88 * scale, neckY - 64 * scale + scarfWave1 * 14
-        );
-        // Forked swallowtail tip
-        ctx.lineTo(neckX - 102 * scale, neckY - 72 * scale + scarfWave1 * 16);
-        ctx.lineTo(neckX - 86 * scale, neckY - 60 * scale + scarfWave1 * 14);
-        ctx.lineTo(neckX - 96 * scale, neckY - 52 * scale + scarfWave1 * 14);
-        ctx.bezierCurveTo(
-            neckX - 50 * scale, neckY - 32 * scale + scarfWave2 * 9,
-            neckX - 22 * scale, neckY - 12 * scale + scarfWave1 * 5,
-            neckX, neckY - 2 * scale
-        );
-        ctx.closePath();
-        ctx.fill();
-
-        // Scarf Layer 3: Vibrant Vermilion Wind Crest Highlight
-        ctx.fillStyle = '#E74C3C';
-        ctx.beginPath();
-        ctx.moveTo(neckX + 1 * scale, neckY - 2 * scale);
-        ctx.bezierCurveTo(
-            neckX - 24 * scale, neckY - 20 * scale + scarfWave1 * 6,
-            neckX - 52 * scale, neckY - 42 * scale + scarfWave2 * 10,
-            neckX - 85 * scale, neckY - 66 * scale + scarfWave1 * 14
-        );
-        ctx.lineTo(neckX - 82 * scale, neckY - 62 * scale + scarfWave1 * 14);
-        ctx.bezierCurveTo(
-            neckX - 50 * scale, neckY - 38 * scale + scarfWave2 * 9,
-            neckX - 22 * scale, neckY - 16 * scale + scarfWave1 * 5,
-            neckX - 1 * scale, neckY - 1 * scale
-        );
-        ctx.closePath();
-        ctx.fill();
-
-        // Trailing fire embers floating off the scarf
-        for (let k = 0; k < 4; k++) {
-            const emberProgress = ((anim * 35 + k * 25) % 90);
-            const ex = neckX - 70 * scale - emberProgress * 0.45 * scale;
-            const ey = neckY - 45 * scale - emberProgress * 0.35 * scale + Math.sin(anim * 6 + k) * 6 * scale;
-            const emberAlpha = Math.max(0, 1 - emberProgress / 90);
-            ctx.fillStyle = `rgba(255, 71, 87, ${emberAlpha})`;
-            ctx.beginPath();
-            ctx.arc(ex, ey, (1.8 - k * 0.3) * scale, 0, Math.PI * 2);
-            ctx.fill();
+        ctx.moveTo(leftPts[0].x, leftPts[0].y);
+        for (let i = 1; i < leftPts.length; i++) {
+            const mx = (leftPts[i - 1].x + leftPts[i].x) / 2;
+            const my = (leftPts[i - 1].y + leftPts[i].y) / 2;
+            ctx.quadraticCurveTo(leftPts[i - 1].x, leftPts[i - 1].y, mx, my);
         }
-        ctx.restore();
-
-        // ── 3. Shadow Ninja Body & Martial Stance (暗影国风武者身躯) ──
-        ctx.save();
-        ctx.translate(sway, hop);
-
-        // Back leg (Right leg, braced back)
-        ctx.fillStyle = '#111722';
-        ctx.beginPath();
-        ctx.moveTo(-6 * scale, 6 * scale);
-        ctx.lineTo(-20 * scale, 18 * scale);
-        ctx.lineTo(-26 * scale, 34 * scale);
-        ctx.lineTo(-14 * scale, 34 * scale);
-        ctx.lineTo(-12 * scale, 22 * scale);
-        ctx.lineTo(0, 6 * scale);
+        ctx.lineTo(tail.x, tail.y);
+        for (let i = rightPts.length - 1; i >= 0; i--) {
+            const nextIdx = i > 0 ? i - 1 : 0;
+            const mx = (rightPts[i].x + rightPts[nextIdx].x) / 2;
+            const my = (rightPts[i].y + rightPts[nextIdx].y) / 2;
+            ctx.quadraticCurveTo(rightPts[i].x, rightPts[i].y, mx, my);
+        }
         ctx.closePath();
         ctx.fill();
 
-        // Front leg (Left leg, leading toward the soccer ball)
-        ctx.fillStyle = '#18202D';
+        // ── Layer 3: Top Wind Crest Luminous Vermilion Highlight Streak ──
+        ctx.strokeStyle = '#FF4757';
+        ctx.lineWidth = 2.0 * scale;
         ctx.beginPath();
-        ctx.moveTo(2 * scale, 6 * scale);
-        ctx.lineTo(14 * scale, 16 * scale);
-        ctx.lineTo(18 * scale, 32 * scale);
-        ctx.lineTo(26 * scale, 32 * scale);
-        ctx.lineTo(22 * scale, 20 * scale);
-        ctx.lineTo(8 * scale, 6 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // White Shaolin leg wraps with dark cross ties (白绑腿)
-        ctx.fillStyle = '#E2E8F0';
-        ctx.fillRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
-        ctx.fillRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
-        ctx.strokeStyle = '#1E293B';
-        ctx.lineWidth = 1.0 * scale;
-        ctx.strokeRect(-24 * scale, 24 * scale, 11 * scale, 9 * scale);
-        ctx.strokeRect(15 * scale, 22 * scale, 11 * scale, 9 * scale);
-
-        // Ninja Combat Sneakers (Dark cleats with gold accent)
-        ctx.fillStyle = '#0B0F15';
-        ctx.fillRect(-27 * scale, 32 * scale, 15 * scale, 5 * scale);
-        ctx.fillRect(14 * scale, 30 * scale, 16 * scale, 5 * scale);
-
-        // Torso: Muscular athletic shadow silhouette
-        ctx.fillStyle = '#151D2A';
-        ctx.beginPath();
-        ctx.moveTo(-16 * scale, -24 * scale);
-        ctx.lineTo(14 * scale, -24 * scale);
-        ctx.lineTo(10 * scale, 6 * scale);
-        ctx.lineTo(-12 * scale, 6 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Chest vest contour & armor bevel
-        ctx.fillStyle = '#222C3D';
-        ctx.beginPath();
-        ctx.moveTo(-12 * scale, -22 * scale);
-        ctx.lineTo(10 * scale, -22 * scale);
-        ctx.lineTo(6 * scale, -4 * scale);
-        ctx.lineTo(-8 * scale, -4 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Shaolin Golden Martial Belt & Dangling Ribbons (金刚武僧腰带)
-        ctx.fillStyle = '#E67E22';
-        ctx.fillRect(-13 * scale, 3 * scale, 25 * scale, 5 * scale);
-        ctx.fillStyle = '#F39C12';
-        ctx.fillRect(-13 * scale, 4 * scale, 25 * scale, 2 * scale);
-        // Belt knot & ribbons
-        ctx.beginPath();
-        ctx.arc(-2 * scale, 5 * scale, 3.5 * scale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#D35400';
-        ctx.beginPath();
-        ctx.moveTo(-4 * scale, 6 * scale);
-        ctx.lineTo(-8 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
-        ctx.lineTo(-4 * scale, 22 * scale + Math.sin(anim * 4) * 3 * scale);
-        ctx.lineTo(-1 * scale, 6 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Arms in Kung Fu Ready Guard Stance
-        // Rear arm (guarding chest)
-        ctx.fillStyle = '#111722';
-        ctx.beginPath();
-        ctx.moveTo(-14 * scale, -22 * scale);
-        ctx.lineTo(-24 * scale, -8 * scale);
-        ctx.lineTo(-18 * scale, 2 * scale);
-        ctx.lineTo(-12 * scale, -6 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Front arm (extended forward in martial poise)
-        ctx.fillStyle = '#1B2332';
-        ctx.beginPath();
-        ctx.moveTo(12 * scale, -22 * scale);
-        ctx.lineTo(24 * scale, -12 * scale);
-        ctx.lineTo(30 * scale, -4 * scale);
-        ctx.lineTo(24 * scale, 2 * scale);
-        ctx.lineTo(14 * scale, -12 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Head: Sleek Shadow Ninja Cowl
-        ctx.fillStyle = '#0F1520';
-        ctx.beginPath();
-        ctx.arc(-1 * scale, -34 * scale, 13 * scale, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Angular cowl jawline
-        ctx.beginPath();
-        ctx.moveTo(-12 * scale, -32 * scale);
-        ctx.lineTo(2 * scale, -20 * scale);
-        ctx.lineTo(11 * scale, -32 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Glowing Razor-Sharp Eye Visor Flare (小黑/苍牙式炽亮战眼神眸)
-        const eyeGlowColor = this.isSuper ? '#FF3838' : '#FFD700';
-        const eyeCoreColor = '#FFFFFF';
-        ctx.shadowColor = eyeGlowColor;
-        ctx.shadowBlur = (this.isCharging ? 16 : 10) * scale;
-
-        // Eye slit
-        ctx.fillStyle = eyeCoreColor;
-        ctx.beginPath();
-        ctx.moveTo(1 * scale, -34 * scale);
-        ctx.lineTo(9 * scale, -32 * scale);
-        ctx.lineTo(7 * scale, -30 * scale);
-        ctx.lineTo(0, -32 * scale);
-        ctx.closePath();
-        ctx.fill();
-
-        // Horizontal luminous eye flare streak
-        ctx.strokeStyle = eyeGlowColor;
-        ctx.lineWidth = 1.8 * scale;
-        ctx.beginPath();
-        ctx.moveTo(-3 * scale, -33 * scale);
-        ctx.lineTo(16 * scale, -31 * scale);
+        ctx.moveTo(leftPts[0].x, leftPts[0].y);
+        for (let i = 1; i < leftPts.length; i++) {
+            const mx = (leftPts[i - 1].x + leftPts[i].x) / 2;
+            const my = (leftPts[i - 1].y + leftPts[i].y) / 2;
+            ctx.quadraticCurveTo(leftPts[i - 1].x, leftPts[i - 1].y, mx, my);
+        }
         ctx.stroke();
 
-        ctx.restore();
+        // ── Trailing Fire Embers floating off the scarf tail ──
+        for (let k = 0; k < 5; k++) {
+            const tailNode = pts[Math.max(0, pts.length - 1 - (k % 3))];
+            const emberOffset = ((this._animTimer * 42 + k * 26) % 80);
+            const ex = tailNode.x - emberOffset * 0.6 * scale;
+            const ey = tailNode.y - emberOffset * 0.35 * scale + Math.sin(this._animTimer * 5.2 + k) * 5 * scale;
+            const alpha = Math.max(0, 1 - emberOffset / 80);
+            ctx.fillStyle = k % 2 === 0 ? `rgba(255, 71, 87, ${alpha})` : `rgba(255, 215, 0, ${alpha * 0.8})`;
+            ctx.beginPath();
+            ctx.arc(ex, ey, (2.2 - k * 0.35) * scale, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.restore();
     }
 
