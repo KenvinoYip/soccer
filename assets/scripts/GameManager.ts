@@ -574,6 +574,7 @@ export class GameManager extends Component {
 
       // 直接震飞扑倒守门员
       this.keeper.knockback();
+      audioSystem.play('bellShatter');
 
       // 直接重创砖块：下半部全部击碎，上半部全体重创
       const tntQueue: { x: number; y: number }[] = [];
@@ -1168,16 +1169,21 @@ export class GameManager extends Component {
 
           if (shieldBlocked) {
             audioSystem.play('shield');
-            floatTextPool.spawn(ball.x, ball.y + 20, '🛡️ 守门员格挡!', '#f1c40f', 16);
+            floatTextPool.spawn(ball.x, ball.y + 20, '🛡️ 金刚神钟格挡!', '#f1c40f', 16);
             physicsSystem.reflectBallOffKeeper(ball, this.keeper);
+            this.keeper.triggerBlock(ball.x, ball.y, true);
           } else if (!ball.isSuper && ball.dmg < 300) {
             audioSystem.play('shield');
+            floatTextPool.spawn(ball.x, ball.y + 20, '🛡️ 罗汉推山截击!', '#f59e0b', 16);
             physicsSystem.reflectBallOffKeeper(ball, this.keeper);
+            this.keeper.triggerBlock(ball.x, ball.y, false);
           } else {
             // Super ball or meteor knocks keeper out!
             this.keeper.knockback();
-            floatTextPool.spawn(ball.x, ball.y, '💥 飞身扑街 KO!', '#ff4757', 22);
-            particlePool.spawnSpark(ball.x, ball.y, 14, '#ff6b35');
+            audioSystem.play('bellShatter');
+            floatTextPool.spawn(ball.x, ball.y, '💥 破钟震飞! 罗汉KO!', '#ff4757', 22);
+            particlePool.spawnSpark(ball.x, ball.y, 18, '#ffd700');
+            shockWavePool.spawn(ball.x, ball.y, true);
           }
         }
       }
@@ -1358,8 +1364,8 @@ export class GameManager extends Component {
         drawAimLine(gfx, trajectory, isSuper);
       }
 
-      // 4. Goalkeeper
-      this.keeper.draw(gfx);
+      // 4. Goalkeeper (少林金刚玄铁罗汉)
+      this.keeper.draw(gfx, this.ctx);
 
       // 5. Balls
       for (const ball of this.balls) {

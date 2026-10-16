@@ -208,22 +208,86 @@ export class AudioSystem {
       }
 
       case 'shield': {
-        // Square osc, 600 -> 200Hz, 0.15s, gain 0.4
+        // 少林金刚铜钟金石交鸣 (Shaolin Bronze Bell Gong with rich harmonic overtones)
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const strike = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        const gain2 = ctx.createGain();
+        const strikeGain = ctx.createGain();
+
+        // 铜钟基频 ~520Hz，悠远衰减 0.45s
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(520, now);
+        osc1.frequency.exponentialRampToValueAtTime(460, now + 0.45);
+
+        gain1.gain.setValueAtTime(0.7 * vol, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+
+        // 泛音层 1040Hz
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1040, now);
+        osc2.frequency.exponentialRampToValueAtTime(980, now + 0.3);
+
+        gain2.gain.setValueAtTime(0.35 * vol, now);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+        // 敲击瞬态金石清脆声 0.04s
+        strike.type = 'triangle';
+        strike.frequency.setValueAtTime(1200, now);
+        strike.frequency.exponentialRampToValueAtTime(250, now + 0.05);
+
+        strikeGain.gain.setValueAtTime(0.6 * vol, now);
+        strikeGain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+
+        osc1.connect(gain1); gain1.connect(ctx.destination);
+        osc2.connect(gain2); gain2.connect(ctx.destination);
+        strike.connect(strikeGain); strikeGain.connect(ctx.destination);
+
+        osc1.start(now); osc1.stop(now + 0.46);
+        osc2.start(now); osc2.stop(now + 0.31);
+        strike.start(now); strike.stop(now + 0.06);
+        break;
+      }
+
+      case 'bellShatter': {
+        // 金钟罩爆碎·琉璃水晶崩裂炸响
+        const noiseBuffer = this.createNoiseBuffer(0.35);
+        if (noiseBuffer) {
+          const noise = ctx.createBufferSource();
+          noise.buffer = noiseBuffer;
+          const bandpass = ctx.createBiquadFilter();
+          bandpass.type = 'bandpass';
+          bandpass.frequency.setValueAtTime(2200, now);
+          bandpass.Q.setValueAtTime(4.0, now);
+
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.setValueAtTime(0.85 * vol, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+          noise.connect(bandpass);
+          bandpass.connect(noiseGain);
+          noiseGain.connect(ctx.destination);
+
+          noise.start(now);
+          noise.stop(now + 0.36);
+        }
+
+        // 晶体碎裂降调震音
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(1800, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.28);
 
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
-
-        gain.gain.setValueAtTime(0.4 * vol, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        gain.gain.setValueAtTime(0.5 * vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
 
         osc.connect(gain);
         gain.connect(ctx.destination);
 
         osc.start(now);
-        osc.stop(now + 0.16);
+        osc.stop(now + 0.29);
         break;
       }
 
