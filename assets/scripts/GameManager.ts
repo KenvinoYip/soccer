@@ -89,12 +89,23 @@ export class GameManager extends Component {
   private playerVx: number = 0;
   private keysHeld: Set<string> = new Set();
 
-  // ── Camera Shake ──────────────────────────────────────────
+  // ── Camera Shake & Zoom Punch ─────────────────────────────
   private shakeTime: number = 0;
   private shakeMag:  number = 0;
   private shakeOffX: number = 0;
   private shakeOffY: number = 0;
   private flashAlpha: number = 0;
+  private cameraZoom: number = 1.0;
+  private zoomCenterX: number = 0;
+  private zoomCenterY: number = -240;
+
+  // ── Swipe Interception Gesture State ───────────────────────
+  private isSwipingVolley: boolean = false;
+  private swipeStartX: number = 0;
+  private swipeStartY: number = 0;
+  private currentSwipeDx: number = 0;
+  private currentSwipeDy: number = 0;
+  private targetedBall: BallData | null = null;
 
   // ── Hit Stop ──────────────────────────────────────────────
   private hitStop: number = 0;
@@ -258,6 +269,15 @@ export class GameManager extends Component {
     this.aimX = 0;
     this.aimY = 120;
 
+    // Reset camera zoom & swipe state
+    this.cameraZoom = 1.0;
+    this.zoomCenterX = 0;
+    this.zoomCenterY = CONFIG.GROUND_Y;
+    this.isSwipingVolley = false;
+    this.targetedBall = null;
+    this.currentSwipeDx = 0;
+    this.currentSwipeDy = 0;
+
     this.state = GameState.PLAYING;
     console.log(`[GameManager] Stage ${this.stage} started. Ammo: ${this.ammo}, Bricks: ${this.bricks.length}`);
   }
@@ -290,7 +310,7 @@ export class GameManager extends Component {
       return;
     }
 
-    // 3. 当场上有足球在飞行回弹时：点击落点瞬步截击！彻底废弃拖拽人物！
+    // 3. 当场上有足球在飞行回弹时：点击落点瞬步截击 + 划屏控向香蕉球！
     if (this.balls.length > 0) {
       const targets = this.getBallLandingTargets();
       if (targets.length > 0) {
@@ -320,15 +340,23 @@ export class GameManager extends Component {
           shockWavePool.spawn(targetX, CONFIG.GROUND_Y, false);
           audioSystem.play('wata');
 
-          // 判断是否压哨/精准截击时机（球已进入下落草地区或距离触地 <= 7 帧）
+          // 开启划屏控向监听
+          this.isSwipingVolley = true;
+          this.swipeStartX = x;
+          this.swipeStartY = y;
+          this.currentSwipeDx = 0;
+          this.currentSwipeDy = 0;
+          this.targetedBall = bestTarget.ball;
+
+          // 判断是否压哨/精准截击时机（球已进入下落草地区或距离触地 <= 6 帧）
           const inCatchZone = bestTarget.ball.y <= CONFIG.GROUND_Y + 45 && bestTarget.ball.y >= CONFIG.GROUND_Y - 25;
-          if (inCatchZone || (bestTarget.isDescending && bestTarget.framesToLand <= 7)) {
-            // 完美时机触发凌空绝杀！
-            this.executeVolleyKick(bestTarget.ball, true);
+          if (inCatchZone || (bestTarget.isDescending && bestTarget.framesToLand <= 4)) {
+            const grade: 'PERFECT' | 'GREAT' | 'GOOD' = bestTarget.framesToLand <= 2 ? 'PERFECT' : 'GREAT';
+            this.executeVolleyKick(bestTarget.ball, grade, 'center');
+            this.isSwipingVolley = false;
           } else {
             // 提前瞬步就位，摆出蓄势待发姿势！
             this.player.startCharge();
-            floatTextPool.spawn(targetX, CONFIG.GROUND_Y + 45, '⚡ 瞬步就位! 等候抽射!', '#00E5FF', 18, -1.8);
           }
           return;
         }
@@ -361,8 +389,12 @@ export class GameManager extends Component {
   }
 
   private onPointerMove(x: number, y: number) {
-    // 场上有球时不再支持拖拽人物移动（纯靠点击落点瞬步接球）
+    // 场上有球时监听划屏香蕉球矢量（dx/dy）
     if (this.balls.length > 0) {
+      if (this.isSwipingVolley) {
+        this.currentSwipeDx = x - this.swipeStartX;
+        this.currentSwipeDy = y - this.swipeStartY;
+      }
       return;
     }
     if (!this.isCharging) return;
@@ -372,14 +404,30 @@ export class GameManager extends Component {
 
   private onPointerUp() {
     this.isMovingPaddle = false;
-    if (!this.isCharging) return;
-    if (this.balls.length === 0) {
-      this.isCharging = false;
-      this.fireBall();
-    } else {
-      this.isCharging = false;
-      this.player.stopCharge();
+
+    // 场上有球时释放划屏手势
+    if (this.balls.length > 0) {
+      if (this.isSwipingVolley && this.targetedBall) {
+        let intent: 'curve_left' | 'curve_right' | 'sky_rocket' | 'center' = 'center';
+        if (this.currentSwipeDx < -20) intent = 'curve_left';
+        else if (this.currentSwipeDx > 20) intent = 'curve_right';
+        else if (this.currentSwipeDy > 25 && Math.abs(this.currentSwipeDx) <= 20) intent = 'sky_rocket';
+
+        const inCatchZone = this.targetedBall.y <= CONFIG.GROUND_Y + 50 && this.targetedBall.y >= CONFIG.GROUND_Y - 30;
+        if (inCatchZone) {
+          const distToGround = Math.abs(this.targetedBall.y - (CONFIG.GROUND_Y + 15));
+          const grade: 'PERFECT' | 'GREAT' | 'GOOD' = distToGround <= 14 ? 'PERFECT' : 'GREAT';
+          this.executeVolleyKick(this.targetedBall, grade, intent);
+        }
+      }
+      this.isSwipingVolley = false;
+      this.targetedBall = null;
+      return;
     }
+
+    if (!this.isCharging) return;
+    this.isCharging = false;
+    this.fireBall();
   }
 
   // ─────────────────────────────────────────────────────────
@@ -894,22 +942,117 @@ export class GameManager extends Component {
     return targets;
   }
 
-  private executeVolleyKick(ball: BallData, isPerfectTap: boolean = false): void {
+  private executeVolleyKick(
+    ball: BallData,
+    timingGrade: 'PERFECT' | 'GREAT' | 'GOOD' = 'GOOD',
+    swipeIntent: 'curve_left' | 'curve_right' | 'sky_rocket' | 'center' = 'center'
+  ): void {
     ball.volleyCount = (ball.volleyCount || 0) + 1;
     const count = ball.volleyCount;
 
-    // 打砖块力学反弹：依据球落在人物左侧、中间或右侧计算弹射仰角
+    // 打砖块力学反弹：依据球落在人物左侧、中间或右侧计算基准弹射仰角
     const dxToPlayer = ball.x - this.player.x;
     const catchHalfWidth = 44;
     const offset = Math.max(-1, Math.min(1, dxToPlayer / catchHalfWidth)); // -1 to 1
+
     let reboundAngle = (Math.PI / 2) - offset * (Math.PI / 3.6) - Math.max(-0.25, Math.min(0.25, this.playerVx * 0.04));
-    reboundAngle = Math.max(0.42, Math.min(Math.PI - 0.42, reboundAngle));
+
+    // 动作与招式选择（结合划屏香蕉球意图与时机判定）
+    let volleyKickType: KickType = 'spin';
+    let moveName = '';
+    let moveColor = '#FFE600';
+
+    if (swipeIntent === 'curve_left') {
+      reboundAngle = 1.25; // ~71°
+      ball.curl = -0.55;   // 左旋马格努斯弧线力
+      volleyKickType = 'spin';
+      moveName = '🌪️ 左旋香蕉球·神龙摆尾!!';
+      moveColor = '#00E5FF';
+      particlePool.spawnSpark(ball.x, ball.y, 16, '#00E5FF');
+    } else if (swipeIntent === 'curve_right') {
+      reboundAngle = 1.89; // ~108°
+      ball.curl = 0.55;    // 右旋马格努斯弧线力
+      volleyKickType = 'spin';
+      moveName = '🌪️ 右旋贴地斩·狂龙破空!!';
+      moveColor = '#FB923C';
+      particlePool.spawnSpark(ball.x, ball.y, 16, '#FB923C');
+    } else if (swipeIntent === 'sky_rocket') {
+      reboundAngle = Math.PI / 2; // 垂直冲顶
+      ball.curl = 0;
+      ball.pierceLeft = Math.max(ball.pierceLeft || 0, 8);
+      volleyKickType = 'bicycle';
+      moveName = '⚡ 倒挂金钩·穿云破日!!';
+      moveColor = '#FBBF24';
+      shockWavePool.spawn(ball.x, ball.y, true);
+    } else {
+      ball.curl = 0;
+      reboundAngle = Math.max(0.42, Math.min(Math.PI - 0.42, reboundAngle));
+      if (timingGrade === 'PERFECT') {
+        volleyKickType = count % 2 === 0 ? 'bicycle' : 'spin';
+        moveName = '⚡ 瞬步凌空绝杀! PERFECT!';
+        moveColor = '#FFD700';
+      } else if (count === 1) {
+        volleyKickType = 'spin';
+        moveName = '🌪️ 旋风回旋踢! 截击加速!';
+        moveColor = '#00E5FF';
+      } else if (count === 2) {
+        volleyKickType = 'bicycle';
+        moveName = '⚡ 倒挂金钩·双脚暴射! 威力狂飙!';
+        moveColor = '#FFA502';
+      } else {
+        volleyKickType = 'shadowless';
+        moveName = `🥋 ${count}连爆踢·佛山无影连环脚!!`;
+        moveColor = '#FF0055';
+      }
+    }
+
+    // 节拍与打击感系统：顿帧 (Hit Stop) + 镜头变焦打击 (Zoom Punch) + 足球物理压扁 (Squash)
+    let timingDmgMult = 1.0;
+    let timingSpeedMult = 1.0;
+
+    if (timingGrade === 'PERFECT') {
+      timingDmgMult = 2.4;
+      timingSpeedMult = 1.25;
+      this.hitStop = 5;          // 5帧强力打击定格顿帧！
+      this.cameraZoom = 1.14;    // 镜头瞬间向前变焦冲击拉近 14%！
+      this.zoomCenterX = this.player.x;
+      this.zoomCenterY = CONFIG.GROUND_Y;
+      this.triggerShake(16, 12);
+      this.flashAlpha = 0.45;
+      ball.isSuper = true;
+      ball.squashX = 1.5;        // 触球瞬间水平压扁成椭圆！
+      ball.squashY = 0.5;
+      ball.squashTimer = 14;     // 14帧弹性恢复，伴随拉长彗星拖尾
+      floatTextPool.spawnJudgment(this.player.x, this.player.y + 68, 'PERFECT');
+      audioSystem.play('superKick');
+    } else if (timingGrade === 'GREAT') {
+      timingDmgMult = 1.6;
+      timingSpeedMult = 1.12;
+      this.hitStop = 2;          // 2帧短顿帧
+      this.cameraZoom = 1.07;    // 镜头变焦 7%
+      this.zoomCenterX = this.player.x;
+      this.zoomCenterY = CONFIG.GROUND_Y;
+      this.triggerShake(10, 7);
+      ball.squashX = 1.35;
+      ball.squashY = 0.65;
+      ball.squashTimer = 10;
+      floatTextPool.spawnJudgment(this.player.x, this.player.y + 68, 'GREAT');
+      audioSystem.play(count >= 2 ? 'superKick' : 'wata');
+    } else {
+      this.cameraZoom = 1.03;
+      this.triggerShake(6, 4);
+      ball.squashX = 1.2;
+      ball.squashY = 0.8;
+      ball.squashTimer = 8;
+      floatTextPool.spawnJudgment(this.player.x, this.player.y + 62, 'GOOD');
+      audioSystem.play('wata');
+    }
 
     // 连踢层级强化（速度与伤害随连击递增）
-    const speedTiers = [0.52, 0.68, 0.84, 0.98, 1.12];
-    const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)] * (isPerfectTap ? 1.15 : 1.0);
+    const speedTiers = [0.55, 0.72, 0.88, 1.02, 1.15];
+    const speedRatio = speedTiers[Math.min(count, speedTiers.length - 1)] * timingSpeedMult;
     const dmgTiers = [1.0, 1.25, 1.6, 2.0, 2.5];
-    const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)] * (isPerfectTap ? 1.3 : 1.0);
+    const dmgMult = dmgTiers[Math.min(count, dmgTiers.length - 1)] * timingDmgMult;
 
     const modeCfg = CONFIG.MODES[ball.mode] || CONFIG.MODES[0];
     const baseKickSpeed = CONFIG.BALL_MAX_SPEED * modeCfg.speedMultiplier;
@@ -919,54 +1062,19 @@ export class GameManager extends Component {
     ball.vy = Math.sin(reboundAngle) * newSpeed;
     ball.y = CONFIG.GROUND_Y + 28; // 弹起脱离草地判定区
     ball.dmg = Math.round(ball.dmg * dmgMult);
-    ball.pierceLeft = Math.max(ball.pierceLeft || 0, 5); // 恢复连踢超级穿透次数
+    ball.pierceLeft = Math.max(ball.pierceLeft || 0, swipeIntent === 'sky_rocket' ? 8 : 5);
     ball.isSkillProjectile = false; // 保证连击球绝对为可接打砖块常规足球
 
-    if (count >= 2 || isPerfectTap) {
+    if (count >= 2) {
       ball.isSuper = true; // 连击化身金光烈焰球
     }
 
-    // 连击动作库：依据接球连踢次数与落点呈现多样化功夫神技！
-    let volleyKickType: KickType = 'spin';
-    let moveName = '';
-    let moveColor = '#FFE600';
-
-    if (isPerfectTap) {
-      volleyKickType = count % 2 === 0 ? 'bicycle' : 'spin';
-      moveName = `⚡ 瞬步凌空绝杀! PERFECT!`;
-      moveColor = '#FFD700';
-    } else if (count === 1) {
-      volleyKickType = 'spin';
-      moveName = '🌪️ 旋风回旋踢! 截击加速!';
-      moveColor = '#00E5FF';
-    } else if (count === 2) {
-      volleyKickType = 'bicycle';
-      moveName = '⚡ 倒挂金钩·双脚暴射! 威力狂飙!';
-      moveColor = '#FFA502';
-    } else if (count === 3) {
-      if (Math.abs(offset) > 0.35) {
-        volleyKickType = 'spin';
-        moveName = '🌪️ 3连踢·神龙摆尾回旋踢!';
-        moveColor = '#FF9F1C';
-      } else {
-        volleyKickType = 'bicycle';
-        moveName = '⚡ 3连踢·凌空倒挂双飞绝杀!';
-        moveColor = '#FF4757';
-      }
-    } else {
-      volleyKickType = 'shadowless';
-      moveName = `🥋 ${count}连爆踢·佛山无影连环脚!!`;
-      moveColor = '#FF0055';
-    }
-
-    const isSuperKick = count >= 2 || isPerfectTap;
+    const isSuperKick = count >= 2 || timingGrade === 'PERFECT';
     this.player.kick(isSuperKick, volleyKickType);
-    audioSystem.play(isSuperKick ? 'superKick' : 'wata');
-    this.triggerShake(isSuperKick ? 12 : 7, isSuperKick ? 9 : 5);
     shockWavePool.spawn(ball.x, ball.y, isSuperKick);
-    particlePool.spawnSpark(ball.x, ball.y, 10 + count * 3, isSuperKick ? '#FFD700' : '#FF9F1C');
-    particlePool.spawnInkSplatter(ball.x, ball.y, 12);
-    floatTextPool.spawn(this.player.x, this.player.y + 45, moveName, moveColor, 18 + Math.min(count, 4) * 2, -1.8);
+    particlePool.spawnSpark(ball.x, ball.y, 12 + count * 3, isSuperKick ? '#FFD700' : '#FF9F1C');
+    particlePool.spawnInkSplatter(ball.x, ball.y, 14);
+    floatTextPool.spawn(this.player.x, this.player.y + 44, moveName, moveColor, 18 + Math.min(count, 4) * 2, -1.8);
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1126,7 +1234,21 @@ export class GameManager extends Component {
       const catchHalfWidth = 44;
 
       if (!brickHit && isDescending && inCatchZone && Math.abs(dxToPlayer) <= catchHalfWidth) {
-        this.executeVolleyKick(ball, false);
+        let intent: 'curve_left' | 'curve_right' | 'sky_rocket' | 'center' = 'center';
+        if (this.isSwipingVolley) {
+          if (this.currentSwipeDx < -20) intent = 'curve_left';
+          else if (this.currentSwipeDx > 20) intent = 'curve_right';
+          else if (this.currentSwipeDy > 25 && Math.abs(this.currentSwipeDx) <= 20) intent = 'sky_rocket';
+          this.isSwipingVolley = false;
+          this.targetedBall = null;
+        }
+
+        const distToGround = Math.abs(ball.y - (CONFIG.GROUND_Y + 10));
+        let grade: 'PERFECT' | 'GREAT' | 'GOOD' = 'GOOD';
+        if (distToGround <= 14) grade = 'PERFECT';
+        else if (distToGround <= 26) grade = 'GREAT';
+
+        this.executeVolleyKick(ball, grade, intent);
         continue;
       }
 
@@ -1144,9 +1266,13 @@ export class GameManager extends Component {
     floatTextPool.update();
     shockWavePool.update();
 
-    // 8. Screen shake decay
+    // 8. Screen shake decay & camera zoom decay
     this.updateShake();
     this.flashAlpha = Math.max(0, this.flashAlpha - 0.04);
+    if (this.cameraZoom > 1.0) {
+      this.cameraZoom += (1.0 - this.cameraZoom) * 0.16;
+      if (this.cameraZoom < 1.002) this.cameraZoom = 1.0;
+    }
 
     // 9. Render Frame
     this.render();
@@ -1161,14 +1287,25 @@ export class GameManager extends Component {
       const gfx = this.gfx;
       gfx.clear();
 
-      if (this.ctx) {
-        this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-      }
+      const zoom = this.cameraZoom;
+      this.node.setScale(zoom, zoom, 1);
+      const zoomOffX = (this.zoomCenterX || 0) * (1 - zoom);
+      const zoomOffY = (this.zoomCenterY || CONFIG.GROUND_Y) * (1 - zoom);
+      this.node.setPosition(this.shakeOffX + zoomOffX, this.shakeOffY + zoomOffY, 0);
 
-      if (this.shakeOffX !== 0 || this.shakeOffY !== 0) {
-        this.node.setPosition(this.shakeOffX, this.shakeOffY, 0);
-      } else {
-        this.node.setPosition(0, 0, 0);
+      if (this.ctx) {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+        if (zoom !== 1.0 || this.shakeOffX !== 0 || this.shakeOffY !== 0) {
+          const cw = this.ctx.canvas.width;
+          const ch = this.ctx.canvas.height;
+          const scale = Math.min(cw / 440, ch / 780);
+          const cx = cw / 2;
+          const cy = ch / 2;
+          this.ctx.translate(cx + (this.shakeOffX + zoomOffX) * scale, cy - (this.shakeOffY + zoomOffY) * scale);
+          this.ctx.scale(zoom, zoom);
+          this.ctx.translate(-cx, -cy);
+        }
       }
 
       const W = CONFIG.W, H = CONFIG.H;
@@ -1177,7 +1314,13 @@ export class GameManager extends Component {
       drawBackground(gfx, W, H, this.flashAlpha, this.shakeOffX, this.shakeOffY);
 
       // 1.5. Dynamic Landing Target Indicator (草地截球落点预警光圈与准星)
-      drawBallLandingMarker(gfx, this.balls, this.player.x, this.ctx);
+      const swipeInfo = this.isSwipingVolley ? {
+        isSwiping: true,
+        dx: this.currentSwipeDx,
+        dy: this.currentSwipeDy,
+        playerX: this.player.x
+      } : null;
+      drawBallLandingMarker(gfx, this.balls, this.player.x, this.ctx, swipeInfo);
 
       // 2. Bricks with Physics Gravity Falling
       for (const b of this.bricks) {
@@ -1240,7 +1383,10 @@ export class GameManager extends Component {
       // 10. HUD (Power bar, Ammo, Top Status Bar)
       this.drawHUD(gfx);
 
-      // 11. Ultimate Skills Buttons (Direct Click to Cast, 10s CD)
+      // 11. Ultimate Skills Buttons (Direct Click to Cast, 10s CD - Fixed UI)
+      if (this.ctx) {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
       skillSystem.draw(gfx, this.ctx);
 
       // 12. 必杀技特写·半透明武魂神影 (Burst Cut-In Martial Avatar)

@@ -39,6 +39,10 @@ export interface BallData {
     volleyCount?: number;
     speedMult?: number;
     isSkillProjectile?: boolean;
+    curl?: number;          // Lateral Magnus acceleration for banana curve shots
+    squashX?: number;       // Horizontal squash factor (0.5 = squashed, 1.4 = stretched)
+    squashY?: number;       // Vertical squash factor
+    squashTimer?: number;   // Frames remaining for squash/stretch recovery
 }
 
 export interface ParticleData {

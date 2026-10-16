@@ -58,9 +58,24 @@ export class PhysicsSystem {
    */
   public moveBall(ball: BallData, gravity: number = CONFIG.PHYSICS.GRAVITY): void {
     // Kinematics update (Y is UP in Cocos Creator)
+    if (ball.curl) {
+      ball.vx += ball.curl;
+      ball.curl *= 0.965;
+      if (Math.abs(ball.curl) < 0.01) ball.curl = 0;
+    }
     ball.x += ball.vx;
     ball.vy -= gravity;
     ball.y += ball.vy;
+
+    // Squash & stretch recovery
+    if (ball.squashTimer && ball.squashTimer > 0) {
+      ball.squashTimer--;
+      if (ball.squashX !== undefined) ball.squashX += (1.0 - ball.squashX) * 0.25;
+      if (ball.squashY !== undefined) ball.squashY += (1.0 - ball.squashY) * 0.25;
+    } else {
+      ball.squashX = 1.0;
+      ball.squashY = 1.0;
+    }
 
     // Angular rotation based on horizontal linear speed
     const ballRadius = ball.r > 0 ? ball.r : CONFIG.LAYOUT.BALL_RADIUS;

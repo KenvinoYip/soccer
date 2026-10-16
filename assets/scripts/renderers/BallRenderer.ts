@@ -19,6 +19,34 @@ function drawPolygon(
     }
 }
 
+// ─── Helper: draw a squashed/stretched circle for anime impact frames ────────
+function drawSquashedCircle(
+    gfx: Graphics,
+    cx: number,
+    cy: number,
+    r: number,
+    sx: number = 1.0,
+    sy: number = 1.0,
+    angle: number = 0
+): void {
+    if (Math.abs(sx - 1.0) < 0.04 && Math.abs(sy - 1.0) < 0.04) {
+        gfx.circle(cx, cy, r);
+        return;
+    }
+    const segments = 16;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * Math.PI * 2;
+        const lx = Math.cos(theta) * (r * sx);
+        const ly = Math.sin(theta) * (r * sy);
+        const rx = cx + lx * cosA - ly * sinA;
+        const ry = cy + lx * sinA + ly * cosA;
+        if (i === 0) gfx.moveTo(rx, ry);
+        else gfx.lineTo(rx, ry);
+    }
+}
+
 /**
  * Draw a soccer ball with trail, fire/electric effects, and pentagon patches.
  */
@@ -116,10 +144,25 @@ export function drawBall(gfx: Graphics, ball: BallData): void {
         gfx.fill();
     }
 
+    // Squash & stretch parameters
+    const sx = ball.squashX || 1.0;
+    const sy = ball.squashY || 1.0;
+    const moveAngle = Math.atan2(ball.vy, ball.vx);
+
     // ─── 4. Drop Shadow ─────────────────────────────────────────────────────
     gfx.fillColor = new Color(5, 8, 14, 70);
-    gfx.circle(ball.x + 2.5, ball.y - 2.5, ball.r);
+    drawSquashedCircle(gfx, ball.x + 2.5, ball.y - 2.5, ball.r, sx, sy, moveAngle);
     gfx.fill();
+
+    // ─── 4.5 Banana Curve Magnus Spiral (香蕉球旋风光弧) ──────────────────────
+    if (ball.curl && Math.abs(ball.curl) > 0.05) {
+        const curlSign = Math.sign(ball.curl);
+        const spiralAngle = ball.rot * 2;
+        gfx.lineWidth = 2.2;
+        gfx.strokeColor = curlSign > 0 ? new Color(255, 145, 0, 220) : new Color(0, 229, 255, 220);
+        gfx.arc(ball.x, ball.y, ball.r + 5, spiralAngle, spiralAngle + Math.PI * 1.3, curlSign < 0);
+        gfx.stroke();
+    }
 
     // ─── 5. Core Soccer Ball Sphere (Classic 3D Leather Shading) ─────────────
     if (ball.isSuper) {
@@ -129,17 +172,17 @@ export function drawBall(gfx: Graphics, ball: BallData): void {
     } else {
         gfx.fillColor = new Color(250, 250, 252, 255);
     }
-    gfx.circle(ball.x, ball.y, ball.r);
+    drawSquashedCircle(gfx, ball.x, ball.y, ball.r, sx, sy, moveAngle);
     gfx.fill();
 
     // Subtle 3D bottom shading
     gfx.fillColor = new Color(148, 163, 184, 85);
-    gfx.circle(ball.x + 1.5, ball.y - 1.5, ball.r * 0.95);
+    drawSquashedCircle(gfx, ball.x + 1.5, ball.y - 1.5, ball.r * 0.95, sx, sy, moveAngle);
     gfx.fill();
 
     // Re-fill top-left highlight core for spherical depth
     gfx.fillColor = ball.isSuper ? new Color(255, 250, 210, 220) : new Color(255, 255, 255, 220);
-    gfx.circle(ball.x - ball.r * 0.25, ball.y + ball.r * 0.25, ball.r * 0.75);
+    drawSquashedCircle(gfx, ball.x - ball.r * 0.25, ball.y + ball.r * 0.25, ball.r * 0.75, sx, sy, moveAngle);
     gfx.fill();
 
     // ─── 6. Golden Energy Seams & Leather Stitching (太极金光缝线) ───────────
@@ -374,7 +417,8 @@ export function drawBallLandingMarker(
     gfx: Graphics,
     balls: BallData[],
     playerX: number,
-    ctx?: CanvasRenderingContext2D | null
+    ctx?: CanvasRenderingContext2D | null,
+    swipeInfo?: { isSwiping: boolean; dx: number; dy: number; playerX: number } | null
 ): void {
     const halfW = 220;
     const groundY = -240;
@@ -416,15 +460,21 @@ export function drawBallLandingMarker(
 
         const isDescending = ball.vy < 0;
         const isCatchable = Math.abs(simX - playerX) <= 44;
+        const isPerfectWindow = isDescending && frames <= 3;
+        const isGreatWindow = isDescending && frames <= 7;
 
-        // Visual colors: Emerald green when player is at spot, Vivid Amber/Crimson when player needs to tap
-        const colorMain = isCatchable
+        // Visual colors: Gold/white on PERFECT, Emerald green when ready, Crimson when waiting
+        const colorMain = isPerfectWindow
+            ? new Color(255, 220, 50, 255)
+            : isCatchable
             ? new Color(46, 213, 115, 235)
             : isDescending
             ? new Color(255, 75, 75, 230)
             : new Color(255, 175, 25, 180);
 
-        const colorGlow = isCatchable
+        const colorGlow = isPerfectWindow
+            ? new Color(255, 215, 0, 110)
+            : isCatchable
             ? new Color(46, 213, 115, 70)
             : isDescending
             ? new Color(255, 75, 75, 65)
@@ -437,11 +487,11 @@ export function drawBallLandingMarker(
 
         // 2. Pulsing target aura ring
         gfx.fillColor = colorGlow;
-        gfx.circle(simX, groundY, 25);
+        gfx.circle(simX, groundY, isPerfectWindow ? 32 : 25);
         gfx.fill();
 
         // 3. Concentric target boundary
-        gfx.lineWidth = 2.2;
+        gfx.lineWidth = isPerfectWindow ? 3.0 : 2.2;
         gfx.strokeColor = colorMain;
         gfx.circle(simX, groundY, 14);
         gfx.stroke();
@@ -449,8 +499,10 @@ export function drawBallLandingMarker(
         // 4. Dynamic Contracting Timing Ring (r shrinks towards 14 as ball lands)
         if (isDescending) {
             const timingR = 14 + Math.min(38, frames * 1.35);
-            gfx.lineWidth = 1.8;
-            gfx.strokeColor = isCatchable
+            gfx.lineWidth = isPerfectWindow ? 2.5 : 1.8;
+            gfx.strokeColor = isPerfectWindow
+                ? new Color(255, 255, 255, 245)
+                : isCatchable
                 ? new Color(46, 213, 115, 190)
                 : new Color(255, 220, 50, 220);
             gfx.circle(simX, groundY, timingR);
@@ -458,12 +510,12 @@ export function drawBallLandingMarker(
         }
 
         // 5. Inner bullseye
-        gfx.fillColor = colorMain;
-        gfx.circle(simX, groundY, 4.5);
+        gfx.fillColor = isPerfectWindow ? new Color(255, 255, 255, 255) : colorMain;
+        gfx.circle(simX, groundY, isPerfectWindow ? 6 : 4.5);
         gfx.fill();
 
         // 6. Directional crosshair lines
-        gfx.lineWidth = 1.6;
+        gfx.lineWidth = isPerfectWindow ? 2.2 : 1.6;
         gfx.strokeColor = colorMain;
         gfx.moveTo(simX - 22, groundY);
         gfx.lineTo(simX + 22, groundY);
@@ -472,7 +524,7 @@ export function drawBallLandingMarker(
         gfx.lineTo(simX, groundY + 8);
         gfx.stroke();
 
-        // 7. Interactive High-Res Floating Badge on Canvas2D Overlay
+        // 7. Interactive High-Res Floating Badge & Swipe Trajectory on Canvas2D Overlay
         if (ctx) {
             const cw = ctx.canvas.width;
             const ch = ctx.canvas.height;
@@ -484,10 +536,129 @@ export function drawBallLandingMarker(
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            if (isCatchable) {
-                // Character is in place: show ready badge
+            // ── Dynamic Swipe Trajectory Guide Curve (划屏香蕉球/穿云炮实时轨迹) ──
+            if (swipeInfo && swipeInfo.isSwiping && isCatchable) {
+                const px = cw / 2 + swipeInfo.playerX * scale;
+                const py = screenY;
+                const sdx = swipeInfo.dx;
+                const sdy = swipeInfo.dy;
+
+                let intentText = '🥋 稳准抽射·直击中路';
+                let intentColor = '#4ADE80';
+
+                ctx.lineWidth = 3.5 * scale;
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+
+                if (sdx < -20) {
+                    // Left Banana Curve (左旋香蕉球)
+                    intentText = '🌪️ 左旋香蕉球·神龙摆尾';
+                    intentColor = '#00E5FF';
+                    ctx.strokeStyle = intentColor;
+                    ctx.shadowColor = '#00E5FF';
+                    ctx.shadowBlur = 12 * scale;
+                    const cpx = px - 85 * scale;
+                    const cpy = py - 70 * scale;
+                    const endX = px - 110 * scale;
+                    const endY = py - 180 * scale;
+                    ctx.quadraticCurveTo(cpx, cpy, endX, endY);
+                    ctx.stroke();
+
+                    // Arrowhead
+                    ctx.fillStyle = intentColor;
+                    ctx.beginPath();
+                    ctx.arc(endX, endY, 6 * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (sdx > 20) {
+                    // Right Banana Curve (右旋贴地斩)
+                    intentText = '🌪️ 右旋贴地斩·狂龙破空';
+                    intentColor = '#FB923C';
+                    ctx.strokeStyle = intentColor;
+                    ctx.shadowColor = '#FB923C';
+                    ctx.shadowBlur = 12 * scale;
+                    const cpx = px + 85 * scale;
+                    const cpy = py - 70 * scale;
+                    const endX = px + 110 * scale;
+                    const endY = py - 180 * scale;
+                    ctx.quadraticCurveTo(cpx, cpy, endX, endY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = intentColor;
+                    ctx.beginPath();
+                    ctx.arc(endX, endY, 6 * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (sdy > 25) {
+                    // Sky Rocket Piercing Shot (穿云破空炮)
+                    intentText = '⚡ 倒挂金钩·穿云破日';
+                    intentColor = '#FBBF24';
+                    ctx.strokeStyle = intentColor;
+                    ctx.shadowColor = '#FBBF24';
+                    ctx.shadowBlur = 15 * scale;
+                    const endX = px;
+                    const endY = py - 200 * scale;
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = intentColor;
+                    ctx.beginPath();
+                    ctx.arc(endX, endY, 7 * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Direct shot
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.setLineDash([4 * scale, 4 * scale]);
+                    ctx.lineTo(px, py - 140 * scale);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Show Current Swipe Intent Banner
+                const bannerY = screenY - 55 * scale;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.strokeStyle = intentColor;
+                ctx.lineWidth = 1.8 * scale;
+                const bW = 150 * scale;
+                const bH = 26 * scale;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(px - bW / 2, bannerY - bH / 2, bW, bH, 13 * scale);
+                else ctx.rect(px - bW / 2, bannerY - bH / 2, bW, bH);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `bold ${Math.round(11 * scale)}px 'PingFang SC', sans-serif`;
+                ctx.fillText(intentText, px, bannerY);
+            } else if (isPerfectWindow) {
+                // ── PERFECT Timing Window ──
+                const tagH = 26 * scale;
+                const tagW = 120 * scale;
+                const tagY = screenY - 42 * scale;
+
+                ctx.shadowColor = '#FBBF24';
+                ctx.shadowBlur = 18 * scale;
+                ctx.fillStyle = '#EAB308';
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2.5 * scale;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH, 13 * scale);
+                else ctx.rect(screenX - tagW / 2, tagY - tagH / 2, tagW, tagH);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#0F172A';
+                ctx.font = `900 ${Math.round(12 * scale)}px 'PingFang SC', sans-serif`;
+                ctx.fillText('⚡ PERFECT! 出脚', screenX, tagY);
+
+                // Guide hint below
+                ctx.fillStyle = '#FDE047';
+                ctx.font = `bold ${Math.round(9 * scale)}px 'PingFang SC', sans-serif`;
+                ctx.fillText('划屏踢出香蕉球/穿云炮', screenX, tagY + 18 * scale);
+            } else if (isCatchable) {
+                // Character is in place: show ready badge + swipe hint
                 const tagH = 22 * scale;
-                const tagW = 92 * scale;
+                const tagW = 100 * scale;
                 const tagY = screenY - 35 * scale;
 
                 ctx.fillStyle = 'rgba(16, 185, 129, 0.92)';
@@ -501,7 +672,7 @@ export function drawBallLandingMarker(
 
                 ctx.fillStyle = '#FFFFFF';
                 ctx.font = `900 ${Math.round(11 * scale)}px 'PingFang SC', sans-serif`;
-                ctx.fillText('🥋 已就位·截击', screenX, tagY);
+                ctx.fillText(isGreatWindow ? '⚡ GREAT 时机' : '🥋 已就位·截击', screenX, tagY);
             } else {
                 // Needs tap: show bouncing urgent tap button with glowing border
                 const bounce = Math.sin(Date.now() * 0.009) * 3.5 * scale;

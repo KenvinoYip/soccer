@@ -302,6 +302,7 @@ export class PlayerEntity {
                 if (kickSource) {
                     const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
                     this._drawActionKick(ctx, kickSource, cx, cy, scale, progress);
+                    this._drawInkBrushSmear(ctx, cx, cy, scale);
                 } else {
                     this._drawIdleSprite(ctx, cx, cy, scale);
                 }
@@ -597,6 +598,119 @@ export class PlayerEntity {
         ctx.fill();
         ctx.stroke();
 
+        ctx.restore();
+    }
+
+    /**
+     * Neo-Ink Wash Calligraphic Brush Smear Arc (新国风狂草墨斩气刃弧光)
+     * High-speed dynamic crescent ink blade swept across foot kick trajectory
+     */
+    private _drawInkBrushSmear(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number): void {
+        const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
+        if (progress > 0.85) return;
+
+        ctx.save();
+        const strokeAlpha = Math.max(0, 1 - progress * 1.15);
+        ctx.globalAlpha = strokeAlpha;
+
+        switch (this.currentKickType) {
+            case 'bicycle': {
+                // Ascending crescent ink blade shooting up to the sky
+                const startX = cx - 20 * scale;
+                const startY = cy + 10 * scale;
+                const tipX = cx + 55 * scale;
+                const tipY = cy - 95 * scale;
+                const cpX = cx + 60 * scale;
+                const cpY = cy - 10 * scale;
+
+                ctx.shadowColor = this.isSuper ? '#FFD700' : '#FF3838';
+                ctx.shadowBlur = 18 * scale;
+
+                // 1. Thick Black Calligraphy Ink Body (浓墨狂草剑气)
+                ctx.fillStyle = '#0F172A';
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
+                ctx.quadraticCurveTo(cpX - 25 * scale, cpY - 30 * scale, startX - 10 * scale, startY - 20 * scale);
+                ctx.closePath();
+                ctx.fill();
+
+                // 2. Burning Qi Core (炎刃流光)
+                ctx.strokeStyle = this.isSuper ? '#FFF9D2' : '#FFE600';
+                ctx.lineWidth = 3.5 * scale;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(cpX - 8 * scale, cpY - 12 * scale, tipX, tipY);
+                ctx.stroke();
+
+                // 3. Flying Ink Droplets (墨滴飞溅)
+                for (let k = 0; k < 5; k++) {
+                    const ratio = 0.3 + k * 0.15;
+                    const dx = startX + (tipX - startX) * ratio + (k % 2 === 0 ? 8 : -8) * scale;
+                    const dy = startY + (tipY - startY) * ratio + (Math.sin(k) * 10) * scale;
+                    ctx.fillStyle = '#0F172A';
+                    ctx.beginPath();
+                    ctx.arc(dx, dy, (2.5 + (k % 3)) * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                break;
+            }
+
+            case 'spin': {
+                // 360° Whirlwind Ink Vortex Smear (环形泼墨气旋)
+                ctx.translate(cx, cy - 25 * scale);
+                const r = 70 * scale;
+                const rotStart = progress * Math.PI * 3.5;
+                const rotEnd = rotStart + Math.PI * 1.35;
+
+                ctx.shadowColor = this.isSuper ? '#00E5FF' : '#FF9F1C';
+                ctx.shadowBlur = 16 * scale;
+
+                ctx.strokeStyle = '#0B132B';
+                ctx.lineWidth = 14 * scale;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, rotStart, rotEnd);
+                ctx.stroke();
+
+                ctx.strokeStyle = this.isSuper ? '#E0F2FE' : '#FFD700';
+                ctx.lineWidth = 3.5 * scale;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, rotStart + 0.2, rotEnd - 0.1);
+                ctx.stroke();
+                break;
+            }
+
+            case 'side':
+            case 'shadowless':
+            default: {
+                // Forward Sickle Ink Slash (凌空侧踢横扫墨刃)
+                const startX = cx - 15 * scale;
+                const startY = cy + 20 * scale;
+                const tipX = cx + 85 * scale;
+                const tipY = cy - 40 * scale;
+                const cpX = cx + 45 * scale;
+                const cpY = cy + 35 * scale;
+
+                ctx.shadowColor = this.isSuper ? '#FFD700' : '#FF4757';
+                ctx.shadowBlur = 16 * scale;
+
+                ctx.fillStyle = '#0F172A';
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
+                ctx.quadraticCurveTo(cpX - 15 * scale, cpY - 25 * scale, startX, startY - 10 * scale);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = this.isSuper ? '#FFFBEB' : '#FFA502';
+                ctx.lineWidth = 3.0 * scale;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(cpX, cpY - 5 * scale, tipX, tipY);
+                ctx.stroke();
+                break;
+            }
+        }
         ctx.restore();
     }
 

@@ -25,6 +25,16 @@ export class FloatTextPool {
         this.spawn(x, y, `【連】${combo}x连击!`, '#ffd700', size, -2.8);
     }
 
+    spawnJudgment(x: number, y: number, grade: 'PERFECT' | 'GREAT' | 'GOOD'): void {
+        if (grade === 'PERFECT') {
+            this.spawn(x, y, '【絕】PERFECT!! 绝杀贯日', '#FFD700', 26, -2.4);
+        } else if (grade === 'GREAT') {
+            this.spawn(x, y, '【妙】GREAT! 凌空抽射', '#00E5FF', 21, -2.0);
+        } else {
+            this.spawn(x, y, '【准】GOOD! 截击就位', '#4ADE80', 16, -1.8);
+        }
+    }
+
     spawnStageText(x: number, y: number, stage: number): void {
         this.spawn(x, y, `【少林】第 ${stage} 重天`, '#00eeff', 24, -1.5);
     }
