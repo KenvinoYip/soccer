@@ -10,11 +10,16 @@ function hexToColor(hex: string, alpha: number = 255): Color {
     return new Color(r, g, b, Math.round(Math.max(0, Math.min(255, alpha))));
 }
 
+export type KickType = 'side' | 'bicycle' | 'spin' | 'shadowless';
+
 /**
  * High-End 2D Anime Hero Sprite Player
- * - Dual-State Real Game Sprites:
- *   1. Ready / Idle Stance (Handsome kung fu hero in martial posture)
- *   2. Flying Dragon Martial Kick (Dynamic aerial bicycle/dragon kick with fiery trails)
+ * - Bruce Lee Jeet Kune Do Multi-Action Repertoire:
+ *   1. Ready / Idle Stance (Springy footwork & nose wipe taunt)
+ *   2. Flying Dragon Side Kick (飞龙侧踢)
+ *   3. Aerial Inverted Bicycle Dual-Feet Kick (倒挂金钩·双飞破空)
+ *   4. 360° Whirlwind Spinning Kick (狂暴旋风回旋踢)
+ *   5. Foshan Shadowless Rapid-Fire Kick (佛山无影连环脚)
  * - Automatic background transparency keying
  * - Dynamic kick angle tilt, martial Ki flame aura, and ground contact shadow
  */
@@ -26,6 +31,8 @@ export class PlayerEntity {
 
     public kickFrame: number = 0; // 0=idle, 1=charge, 2=kick, 3=followthrough
     public kickTimer: number = 0;
+    public maxKickTimer: number = 20;
+    public currentKickType: KickType = 'side';
     public isCharging: boolean = false;
     public auraAlpha: number = 0;
     public isSuper: boolean = false;
@@ -55,6 +62,8 @@ export class PlayerEntity {
         this.vx = 0;
         this.kickFrame = 0;
         this.kickTimer = 0;
+        this.maxKickTimer = 20;
+        this.currentKickType = 'side';
         this.isCharging = false;
         this.auraAlpha = 0;
         this.isSuper = false;
@@ -139,11 +148,13 @@ export class PlayerEntity {
         }
     }
 
-    public kick(isSuper: boolean = false): void {
+    public kick(isSuper: boolean = false, kickType: KickType = 'side'): void {
         this.isCharging = false;
         this.isSuper = isSuper;
+        this.currentKickType = kickType;
+        this.maxKickTimer = (kickType === 'spin' || kickType === 'bicycle') ? 24 : 20;
+        this.kickTimer = this.maxKickTimer;
         this.kickFrame = 2;
-        this.kickTimer = 18;
         this.auraAlpha = isSuper ? 1.0 : 0.8;
     }
 
@@ -175,8 +186,8 @@ export class PlayerEntity {
 
         if (this.kickTimer > 0) {
             this.kickTimer--;
-            if (this.kickTimer > 8) {
-                this.kickFrame = 2; // Explosive flying kick
+            if (this.kickTimer > Math.floor(this.maxKickTimer * 0.38)) {
+                this.kickFrame = 2; // Explosive martial kick in mid-air
             } else if (this.kickTimer > 0) {
                 this.kickFrame = 3; // Follow-through landing
             } else {
@@ -192,7 +203,7 @@ export class PlayerEntity {
         if (this.isCharging) {
             this.auraAlpha = 0.8 + 0.2 * Math.sin(this._animTimer * 5);
         } else if (this.kickTimer > 0 && this.isSuper) {
-            this.auraAlpha = Math.max(0, this.kickTimer / 18);
+            this.auraAlpha = Math.max(0, this.kickTimer / this.maxKickTimer);
         } else {
             this.auraAlpha = Math.max(0, this.auraAlpha - 0.04);
         }
@@ -244,23 +255,11 @@ export class PlayerEntity {
             ctx.save();
 
             if (this.kickFrame >= 2) {
-                // ── A. Bruce Lee Flying Dragon Kick Action Sprite (凌空飞龙侧踢) ──
+                // ── A. Bruce Lee Multi-Action Martial Arts Kicks (多招式真功夫特写) ──
                 const kickSource = this._transparentKickCanvas || this._heroKickImg;
                 if (kickSource) {
-                    // Flying high in mid-air
-                    const midAirY = this.kickFrame === 2 ? -44 * scale : -20 * scale;
-                    const midAirX = this.kickFrame === 2 ? 14 * scale : 6 * scale;
-                    ctx.translate(cx + midAirX, cy + midAirY);
-
-                    // Dynamic kick angle tilt and slight scale bounce
-                    const kickAngle = this.kickFrame === 2 ? 0.12 : 0.04;
-                    ctx.rotate(kickAngle);
-                    const kickScale = (this.isSuper ? 1.18 : 1.10) * scale;
-                    ctx.scale(kickScale, kickScale);
-
-                    const kw = 175;
-                    const kh = 175;
-                    ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                    const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
+                    this._drawActionKick(ctx, kickSource, cx, cy, scale, progress);
                 } else {
                     this._drawIdleSprite(ctx, cx, cy, scale);
                 }
@@ -275,10 +274,198 @@ export class PlayerEntity {
             this._drawVectorFallback(gfx, currentPx, py);
         }
 
-        // 4. Foot energy flash (kicking)
+        // 4. Specialized foot energy flash & martial VFX
         if (this.kickFrame >= 2) {
             this._drawKickVFX(gfx);
         }
+    }
+
+    private _drawActionKick(
+        ctx: CanvasRenderingContext2D,
+        kickSource: HTMLCanvasElement | HTMLImageElement,
+        cx: number,
+        cy: number,
+        scale: number,
+        progress: number
+    ): void {
+        const kw = 175;
+        const kh = 175;
+
+        switch (this.currentKickType) {
+            case 'bicycle': {
+                // ── 倒挂金钩·凌空背跃双脚踢出 (Inverted Bicycle Kick / 背着地双脚踢出) ──
+                // 跳跃轨迹：高空大弧度背飞后跃 (跃起高达76px)
+                const jumpY = -76 * Math.sin(Math.min(1, progress * 1.3) * Math.PI) * scale;
+                const jumpX = -10 * Math.sin(progress * Math.PI) * scale;
+                const activeCx = cx + jumpX;
+                const activeCy = cy + jumpY;
+
+                // 身体倾角：完全倒挂横背向地，双脚直指长空！
+                // 角度约 -120° ~ -135° (-2.18 ~ -2.35 rad)
+                const kickAngle = -2.18 + (1 - progress) * 0.22;
+                const kickScale = (this.isSuper ? 1.22 : 1.14) * scale;
+
+                // 1. 绘制“双脚踢出”的剪刀脚双飞残影 (展现两只脚同时凌空暴射)
+                ctx.save();
+                ctx.translate(activeCx + 22 * scale, activeCy - 12 * scale);
+                ctx.rotate(kickAngle + 0.18);
+                ctx.scale(kickScale * 0.96, kickScale * 0.96);
+                ctx.globalAlpha = 0.52;
+                ctx.shadowColor = this.isSuper ? '#FFD700' : '#FF6B35';
+                ctx.shadowBlur = 12 * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+
+                // 2. 绘制主体倒挂身躯
+                ctx.save();
+                ctx.translate(activeCx, activeCy);
+                ctx.rotate(kickAngle);
+                ctx.scale(kickScale, kickScale);
+                ctx.shadowColor = this.isSuper ? '#FFE600' : '#FF9F1C';
+                ctx.shadowBlur = (this.isSuper ? 18 : 10) * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+
+                // 3. 双脚脚尖双喷射天火火箭尾焰 (烈焰向下推进，排空起跳)
+                if (progress < 0.8) {
+                    const foot1X = activeCx + 38 * scale;
+                    const foot1Y = activeCy - 58 * scale;
+                    const foot2X = activeCx + 18 * scale;
+                    const foot2Y = activeCy - 44 * scale;
+
+                    this._drawFootFlameJet(ctx, foot1X, foot1Y, scale, this.isSuper);
+                    this._drawFootFlameJet(ctx, foot2X, foot2Y, scale * 0.85, this.isSuper);
+                }
+                break;
+            }
+
+            case 'spin': {
+                // ── 360° 狂暴旋风回旋踢·神龙摆尾 (Whirlwind Spinning Kick) ──
+                const jumpY = -50 * Math.sin(progress * Math.PI) * scale;
+                const activeCx = cx;
+                const activeCy = cy + jumpY;
+
+                // 360° 旋转角速度 (完整一周旋转)
+                const spinAngle = progress * Math.PI * 2 + 0.15;
+                const kickScale = (1.12 + 0.08 * Math.sin(spinAngle * 2)) * scale * (this.isSuper ? 1.16 : 1.05);
+
+                // 1. 旋风残影 1 (滞后 0.38 rad)
+                ctx.save();
+                ctx.translate(activeCx, activeCy);
+                ctx.rotate(spinAngle - 0.38);
+                ctx.scale(kickScale * 0.95, kickScale * 0.95);
+                ctx.globalAlpha = 0.38;
+                ctx.shadowColor = '#00E5FF';
+                ctx.shadowBlur = 14 * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+
+                // 2. 旋风残影 2 (滞后 0.72 rad)
+                ctx.save();
+                ctx.translate(activeCx, activeCy);
+                ctx.rotate(spinAngle - 0.72);
+                ctx.scale(kickScale * 0.90, kickScale * 0.90);
+                ctx.globalAlpha = 0.22;
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 10 * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+
+                // 3. 回旋踢主体
+                ctx.save();
+                ctx.translate(activeCx, activeCy);
+                ctx.rotate(spinAngle);
+                ctx.scale(kickScale, kickScale);
+                ctx.shadowColor = this.isSuper ? '#FFE600' : '#FF9F1C';
+                ctx.shadowBlur = 14 * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+                break;
+            }
+
+            case 'shadowless': {
+                // ── 佛山无影连环脚 (Foshan Shadowless Multi-Kick) ──
+                const midAirY = -46 * scale;
+                const vibX = Math.sin(this.kickTimer * 3.2) * 12 * scale;
+                const activeCx = cx + vibX;
+                const activeCy = cy + midAirY;
+                const kickScale = (this.isSuper ? 1.20 : 1.12) * scale;
+
+                // 三道炫彩高频影分身残影 (青蓝、赤红、辉金)
+                const ghosts = [
+                    { offX: -26 * scale, offY: 4 * scale, alpha: 0.35, color: '#00E5FF' },
+                    { offX: -14 * scale, offY: -4 * scale, alpha: 0.50, color: '#FF3838' },
+                    { offX: 14 * scale, offY: 2 * scale, alpha: 0.50, color: '#FFD700' }
+                ];
+                for (const g of ghosts) {
+                    ctx.save();
+                    ctx.translate(activeCx + g.offX, activeCy + g.offY);
+                    ctx.rotate(0.12);
+                    ctx.scale(kickScale, kickScale);
+                    ctx.globalAlpha = g.alpha;
+                    ctx.shadowColor = g.color;
+                    ctx.shadowBlur = 12 * scale;
+                    ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                    ctx.restore();
+                }
+
+                // 主体飞踢
+                ctx.save();
+                ctx.translate(activeCx, activeCy);
+                ctx.rotate(0.12);
+                ctx.scale(kickScale, kickScale);
+                ctx.shadowColor = '#FFE600';
+                ctx.shadowBlur = 16 * scale;
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                ctx.restore();
+                break;
+            }
+
+            case 'side':
+            default: {
+                // ── 经典李小龙凌空飞龙侧踢 ──
+                const midAirY = this.kickFrame === 2 ? -44 * scale : -20 * scale;
+                const midAirX = this.kickFrame === 2 ? 16 * scale : 6 * scale;
+                ctx.translate(cx + midAirX, cy + midAirY);
+
+                const kickAngle = this.kickFrame === 2 ? 0.14 : 0.04;
+                ctx.rotate(kickAngle);
+                const kickScale = (this.isSuper ? 1.18 : 1.10) * scale;
+                ctx.scale(kickScale, kickScale);
+                ctx.drawImage(kickSource, -kw / 2, -kh / 2, kw, kh);
+                break;
+            }
+        }
+    }
+
+    private _drawFootFlameJet(ctx: CanvasRenderingContext2D, fx: number, fy: number, scale: number, isSuper: boolean): void {
+        ctx.save();
+        const coreColor = isSuper ? '#FFFFFF' : '#FFF9D2';
+        const flameColor = isSuper ? '#FFE600' : '#FF6B35';
+        const outerColor = isSuper ? '#FF3838' : '#D35400';
+
+        // 喷射火焰向斜下方喷吐动力，推举身躯冲天
+        ctx.fillStyle = outerColor;
+        ctx.beginPath();
+        ctx.moveTo(fx - 7 * scale, fy);
+        ctx.lineTo(fx + 7 * scale, fy);
+        ctx.lineTo(fx, fy + 26 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = flameColor;
+        ctx.beginPath();
+        ctx.moveTo(fx - 4 * scale, fy);
+        ctx.lineTo(fx + 4 * scale, fy);
+        ctx.lineTo(fx, fy + 18 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = coreColor;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 4 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     }
 
     private _drawIdleSprite(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number = 1.0): void {
@@ -326,16 +513,26 @@ export class PlayerEntity {
     private _drawShadow(gfx: Graphics, px: number, py: number, hopY: number = 0): void {
         // When character hops high, shadow shrinks and diffuses (3D depth perception!)
         const isMidAirKick = this.kickFrame >= 2;
-        const heightOffset = isMidAirKick ? 45 : Math.max(0, hopY);
-        const shadowRadius = Math.max(14, 30 - heightOffset * 0.45);
-        const shadowAlpha = Math.max(35, Math.floor(130 - heightOffset * 1.8));
+        let heightOffset = Math.max(0, hopY);
+        if (isMidAirKick) {
+            const progress = 1 - (this.kickTimer / (this.maxKickTimer || 20));
+            if (this.currentKickType === 'bicycle') {
+                heightOffset = 76 * Math.sin(Math.min(1, progress * 1.3) * Math.PI);
+            } else if (this.currentKickType === 'spin') {
+                heightOffset = 50 * Math.sin(progress * Math.PI);
+            } else {
+                heightOffset = 45;
+            }
+        }
+        const shadowRadius = Math.max(10, 30 - heightOffset * 0.42);
+        const shadowAlpha = Math.max(25, Math.floor(130 - heightOffset * 1.6));
 
         gfx.fillColor = hexToColor('#05080c', Math.floor(shadowAlpha * 0.6));
         gfx.circle(px, py - 48, shadowRadius);
         gfx.fill();
 
         gfx.fillColor = hexToColor('#020406', shadowAlpha);
-        gfx.circle(px, py - 48, Math.max(8, shadowRadius * 0.6));
+        gfx.circle(px, py - 48, Math.max(6, shadowRadius * 0.6));
         gfx.fill();
     }
 
@@ -373,34 +570,123 @@ export class PlayerEntity {
     }
 
     private _drawKickVFX(gfx: Graphics): void {
-        const fx = this.x + 48;
-        const fy = this.y + 60;
+        const px = this.x;
+        const py = this.y;
         const mainColor = this.isSuper ? '#FFE600' : '#FF5500';
 
-        // Blazing impact blast core
-        gfx.fillColor = hexToColor('#FFFFFF', 255);
-        gfx.circle(fx, fy, this.isSuper ? 14 : 9);
-        gfx.fill();
+        switch (this.currentKickType) {
+            case 'bicycle': {
+                // 倒挂双飞踢：双脚高位双重金色震荡波 + 冲天金色光华
+                const fx1 = px + 36;
+                const fy1 = py + 86;
+                const fx2 = px + 18;
+                const fy2 = py + 74;
 
-        gfx.fillColor = hexToColor(mainColor, 180);
-        gfx.circle(fx, fy, this.isSuper ? 28 : 18);
-        gfx.fill();
+                for (const pos of [{x: fx1, y: fy1}, {x: fx2, y: fy2}]) {
+                    gfx.fillColor = hexToColor('#FFFFFF', 255);
+                    gfx.circle(pos.x, pos.y, this.isSuper ? 12 : 8);
+                    gfx.fill();
 
-        // Golden shockwave ring
-        gfx.lineWidth = 3.5;
-        gfx.strokeColor = hexToColor(mainColor, 230);
-        gfx.circle(fx, fy, this.isSuper ? 38 : 24);
-        gfx.stroke();
+                    gfx.fillColor = hexToColor(mainColor, 180);
+                    gfx.circle(pos.x, pos.y, this.isSuper ? 24 : 16);
+                    gfx.fill();
 
-        // Radiating dragon energy slashes
-        for (let i = 0; i < 8; i++) {
-            const angle = (i * Math.PI) / 4 + this._animTimer * 3;
-            const len = (this.isSuper ? 28 : 16) + (i % 2) * 10;
-            gfx.lineWidth = 2.5;
-            gfx.strokeColor = hexToColor('#FFFFFF', 220);
-            gfx.moveTo(fx, fy);
-            gfx.lineTo(fx + Math.cos(angle) * len, fy + Math.sin(angle) * len);
-            gfx.stroke();
+                    gfx.lineWidth = 3.0;
+                    gfx.strokeColor = hexToColor(mainColor, 220);
+                    gfx.circle(pos.x, pos.y, this.isSuper ? 36 : 24);
+                    gfx.stroke();
+                }
+
+                // 垂直冲天双刃光华
+                gfx.lineWidth = 2.5;
+                gfx.strokeColor = hexToColor('#FFFFFF', 240);
+                gfx.moveTo(fx1, fy1 - 10);
+                gfx.lineTo(fx1 + 10, fy1 + 35);
+                gfx.stroke();
+                gfx.moveTo(fx2, fy2 - 10);
+                gfx.lineTo(fx2 - 8, fy2 + 35);
+                gfx.stroke();
+                break;
+            }
+
+            case 'spin': {
+                // 360° 旋风回旋踢：周身旋转飓风风刃光环 + 环形扩散风暴
+                const centerX = px;
+                const centerY = py + 48;
+                const vortexR = (this.isSuper ? 54 : 42) + Math.sin(this._animTimer * 12) * 6;
+
+                // 旋转飓风风暴光环
+                gfx.lineWidth = 3.5;
+                gfx.strokeColor = hexToColor(this.isSuper ? '#FFE600' : '#00E5FF', 230);
+                gfx.circle(centerX, centerY, vortexR);
+                gfx.stroke();
+
+                // 4道旋转风刃弧线
+                for (let i = 0; i < 4; i++) {
+                    const ang = this._animTimer * 6 + (i * Math.PI) / 2;
+                    const r1 = vortexR * 0.7;
+                    const r2 = vortexR * 1.15;
+                    gfx.lineWidth = 2.8;
+                    gfx.strokeColor = hexToColor('#FFFFFF', 220);
+                    gfx.moveTo(centerX + Math.cos(ang) * r1, centerY + Math.sin(ang) * r1);
+                    gfx.lineTo(centerX + Math.cos(ang + 0.4) * r2, centerY + Math.sin(ang + 0.4) * r2);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            case 'shadowless': {
+                // 佛山无影连环脚：交错双爆轰闪光
+                const fx1 = px + 44;
+                const fy1 = py + 62;
+                const fx2 = px + 28;
+                const fy2 = py + 48;
+
+                gfx.fillColor = hexToColor('#FFFFFF', 255);
+                gfx.circle(fx1, fy1, 10);
+                gfx.fill();
+                gfx.circle(fx2, fy2, 8);
+                gfx.fill();
+
+                gfx.fillColor = hexToColor('#FF3838', 190);
+                gfx.circle(fx1, fy1, 22);
+                gfx.fill();
+                gfx.fillColor = hexToColor('#FFD700', 190);
+                gfx.circle(fx2, fy2, 18);
+                gfx.fill();
+                break;
+            }
+
+            case 'side':
+            default: {
+                // 经典飞龙侧踢爆轰
+                const fx = px + 48;
+                const fy = py + 60;
+
+                gfx.fillColor = hexToColor('#FFFFFF', 255);
+                gfx.circle(fx, fy, this.isSuper ? 14 : 9);
+                gfx.fill();
+
+                gfx.fillColor = hexToColor(mainColor, 180);
+                gfx.circle(fx, fy, this.isSuper ? 28 : 18);
+                gfx.fill();
+
+                gfx.lineWidth = 3.5;
+                gfx.strokeColor = hexToColor(mainColor, 230);
+                gfx.circle(fx, fy, this.isSuper ? 38 : 24);
+                gfx.stroke();
+
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI) / 4 + this._animTimer * 3;
+                    const len = (this.isSuper ? 28 : 16) + (i % 2) * 10;
+                    gfx.lineWidth = 2.5;
+                    gfx.strokeColor = hexToColor('#FFFFFF', 220);
+                    gfx.moveTo(fx, fy);
+                    gfx.lineTo(fx + Math.cos(angle) * len, fy + Math.sin(angle) * len);
+                    gfx.stroke();
+                }
+                break;
+            }
         }
     }
 
@@ -436,11 +722,23 @@ export class PlayerEntity {
         // Dark kung fu trousers
         gfx.fillColor = hexToColor('#2C3E50', 255);
         if (this.kickFrame >= 2) {
-            // Flying kick stance
-            gfx.roundRect(px - 10, py, 12, 18, 4);
-            gfx.fill();
-            gfx.roundRect(px + 4, py + 6, 26, 12, 4);
-            gfx.fill();
+            if (this.currentKickType === 'bicycle') {
+                // 倒挂金钩：双腿朝天后背朝地
+                gfx.roundRect(px - 8, py + 16, 12, 26, 4);
+                gfx.fill();
+                gfx.roundRect(px + 6, py + 22, 12, 26, 4);
+                gfx.fill();
+            } else if (this.currentKickType === 'spin') {
+                // 旋风回旋踢：横扫踢腿
+                gfx.roundRect(px - 14, py + 10, 32, 12, 4);
+                gfx.fill();
+            } else {
+                // 飞龙侧踢
+                gfx.roundRect(px - 10, py, 12, 18, 4);
+                gfx.fill();
+                gfx.roundRect(px + 4, py + 6, 26, 12, 4);
+                gfx.fill();
+            }
         } else {
             // Ready stance
             gfx.roundRect(px - 12, py - 10, 10, 24, 3);

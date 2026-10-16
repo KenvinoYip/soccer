@@ -29,7 +29,7 @@ import { physicsSystem }  from './systems/PhysicsSystem';
 import { particlePool }   from './fx/ParticlePool';
 import { floatTextPool }  from './fx/FloatText';
 import { shockWavePool }  from './fx/ShockWave';
-import { PlayerEntity }   from './entities/PlayerEntity';
+import { PlayerEntity, KickType } from './entities/PlayerEntity';
 import { KeeperEntity }   from './entities/KeeperEntity';
 import { createBrickGrid, drawBrick, updateBrickCracks, applyWallGravity } from './entities/BrickEntity';
 import { drawBackground } from './renderers/BackgroundRenderer';
@@ -330,8 +330,9 @@ export class GameManager extends Component {
     // 独立冷却：当前技能立即进入 10s 独立冷却，其他两个技能完全不受影响！
     skillSystem.startCooldown(id);
 
-    // 武僧瞬间跃入高空绝杀动作姿态！
-    this.player.kick(true);
+    // 武僧瞬间跃入对应大招绝杀动作姿态！
+    const castKickType: KickType = id === 'meteor' ? 'bicycle' : id === 'barrage' ? 'spin' : 'shadowless';
+    this.player.kick(true, castKickType);
     audioSystem.play(id === 'meteor' ? 'superKick' : id === 'barrage' ? 'combo' : 'tnt');
     this.triggerShake(12, 8);
 
@@ -348,15 +349,15 @@ export class GameManager extends Component {
     const py = CONFIG.GROUND_Y + 25;
 
     if (id === 'meteor') {
-      // 1. 大力金刚腿·天火陨石：三枚巨型陨石直捣黄龙，垂直向上贯穿全场
+      // 1. 大力金刚腿·天火陨石：倒挂金钩双脚暴射三枚巨型陨石，垂直向上贯穿全场
       audioSystem.play('superKick');
-      this.player.kick(true);
+      this.player.kick(true, 'bicycle');
       this.triggerShake(24, 20);
       this.flashAlpha = 0.65;
 
       shockWavePool.spawn(px, py, true);
       particlePool.spawnGoldExplosion(px, py, 35);
-      floatTextPool.spawn(0, -80, '🔥 大力金刚腿·天火陨石!!', '#FF3838', 26, -1.8);
+      floatTextPool.spawn(0, -80, '🔥 倒挂金钩·天火陨石!!', '#FF3838', 26, -1.8);
 
       // 三道天火陨石齐发：中路绝对垂直冲顶KO门将，左路与右路微扬角覆盖全墙
       const meteorConfigs = [
@@ -383,15 +384,15 @@ export class GameManager extends Component {
       }
 
     } else if (id === 'barrage') {
-      // 2. 万佛千刃·影分身：16枚雷电足球精准智能索敌，直扑每一块存活砖块
+      // 2. 万佛千刃·影分身：360°旋风回旋踢甩出16枚雷电足球精准智能索敌
       audioSystem.play('combo');
-      this.player.kick(false);
+      this.player.kick(false, 'spin');
       this.triggerShake(16, 10);
       this.flashAlpha = 0.45;
 
       shockWavePool.spawn(px, py, false);
       particlePool.spawnSpark(px, py, 25, '#00E5FF');
-      floatTextPool.spawn(0, -80, '⚡ 万佛千刃·影分身暴雨!!', '#00E5FF', 26, -1.8);
+      floatTextPool.spawn(0, -80, '⚡ 旋风万佛·影分身暴雨!!', '#00E5FF', 26, -1.8);
 
       const count = 16;
       const aliveBricks = this.bricks.filter(b => b.hp > 0);
@@ -437,10 +438,10 @@ export class GameManager extends Component {
       }
 
     } else if (id === 'earthquake') {
-      // 3. 如来神掌·山崩地裂：从天而降直接打击敌阵，拍碎砖墙KO门将
+      // 3. 如来神掌·山崩地裂：佛山无影震地从天而降直接打击敌阵，拍碎砖墙KO门将
       audioSystem.play('tnt');
       audioSystem.play('boom');
-      this.player.kick(true);
+      this.player.kick(true, 'shadowless');
       this.triggerShake(32, 24);
       this.flashAlpha = 0.85;
 
@@ -554,6 +555,17 @@ export class GameManager extends Component {
       this.balls.push(ball);
     }
 
+    // 依据射门蓄力与仰角选择李小龙武术发球招式
+    let shotKickType: KickType = 'side';
+    let shotActionName = '🥋 飞龙侧踢! (起手慢速)';
+    if (isSuper) {
+      shotKickType = Math.random() < 0.5 ? 'spin' : 'side';
+      shotActionName = shotKickType === 'spin' ? '🌪️ 旋风绝杀抽射!' : '⚡ 飞龙绝杀抽射!';
+    } else if (Math.abs(dx) < 45 && dy > 150) {
+      shotKickType = 'bicycle'; // 高仰角触发倒挂金钩发球！
+      shotActionName = '⚡ 凌空倒挂金钩! (起手慢速)';
+    }
+
     // SFX + VFX
     audioSystem.play(isSuper ? 'superKick' : 'wata');
     if (isSuper) {
@@ -561,14 +573,14 @@ export class GameManager extends Component {
       this.flashAlpha = 0.35;
       shockWavePool.spawn(startX, startY, true);
       particlePool.spawnGoldExplosion(startX, startY - 10, 15);
-      floatTextPool.spawn(startX, startY + 30, '⚡ 飞龙绝杀!', '#FFD700', 22);
+      floatTextPool.spawn(startX, startY + 30, shotActionName, '#FFD700', 22);
     } else {
       shockWavePool.spawn(startX, startY, false);
       particlePool.spawnSpark(startX, startY, 6, '#ff8c00');
-      floatTextPool.spawn(startX, startY + 25, '🥋 WATA~! (起手舒缓慢速)', '#FFE600', 16, -1.8);
+      floatTextPool.spawn(startX, startY + 25, shotActionName, '#FFE600', 16, -1.8);
     }
 
-    this.player.kick(isSuper);
+    this.player.kick(isSuper, shotKickType);
   }
 
   // ─────────────────────────────────────────────────────────
@@ -925,23 +937,46 @@ export class GameManager extends Component {
           ball.isSuper = true; // 连击化身金光烈焰球
         }
 
-        // 李小龙标志性凌空飞踢姿态 + 拳风音效 + 震屏
+        // 连击动作库：依据接球连踢次数与落点呈现多样化李小龙武术神技！
+        let volleyKickType: KickType = 'spin';
+        let moveName = '';
+        let moveColor = '#FFE600';
+
+        if (count === 1) {
+          // 第1次连踢：360° 旋风回旋踢！
+          volleyKickType = 'spin';
+          moveName = '🌪️ 旋风回旋踢! 截击加速!';
+          moveColor = '#00E5FF';
+        } else if (count === 2) {
+          // 第2次连踢：凌空倒挂金钩·双脚暴射！(跳跃后背着地双脚踢出)
+          volleyKickType = 'bicycle';
+          moveName = '⚡ 倒挂金钩·双脚暴射! 威力狂飙!';
+          moveColor = '#FFA502';
+        } else if (count === 3) {
+          // 第3次连踢：若在侧翼则施展神龙摆尾回旋踢，在中路则施展倒挂金钩双飞绝杀
+          if (Math.abs(offset) > 0.35) {
+            volleyKickType = 'spin';
+            moveName = '🌪️ 3连踢·神龙摆尾回旋踢!';
+            moveColor = '#FF9F1C';
+          } else {
+            volleyKickType = 'bicycle';
+            moveName = '⚡ 3连踢·凌空倒挂双飞绝杀!';
+            moveColor = '#FF4757';
+          }
+        } else {
+          // 第4次及以上：超神境界·佛山无影连环脚！！
+          volleyKickType = 'shadowless';
+          moveName = `🥋 ${count}连爆踢·佛山无影连环脚!!`;
+          moveColor = '#FF0055';
+        }
+
         const isSuperKick = count >= 2;
-        this.player.kick(isSuperKick);
+        this.player.kick(isSuperKick, volleyKickType);
         audioSystem.play(isSuperKick ? 'superKick' : 'wata');
         this.triggerShake(isSuperKick ? 12 : 7, isSuperKick ? 9 : 5);
         shockWavePool.spawn(ball.x, ball.y, isSuperKick);
         particlePool.spawnSpark(ball.x, ball.y, 10 + count * 3, isSuperKick ? '#FFD700' : '#FF9F1C');
-
-        if (count === 1) {
-          floatTextPool.spawn(this.player.x, this.player.y + 45, '⚡ 连环截击! 速度提升!', '#FFE600', 18, -1.8);
-        } else if (count === 2) {
-          floatTextPool.spawn(this.player.x, this.player.y + 45, '🔥 2连踢! 威力暴涨!', '#FFA502', 20, -1.8);
-        } else if (count === 3) {
-          floatTextPool.spawn(this.player.x, this.player.y + 45, '💥 3连踢·真功夫! 火力全开!', '#FF4757', 22, -1.8);
-        } else {
-          floatTextPool.spawn(this.player.x, this.player.y + 45, `🥋 ${count}连爆踢·无影脚!!`, '#FF0055', 24, -1.8);
-        }
+        floatTextPool.spawn(this.player.x, this.player.y + 45, moveName, moveColor, 18 + Math.min(count, 4) * 2, -1.8);
 
         continue;
       }
